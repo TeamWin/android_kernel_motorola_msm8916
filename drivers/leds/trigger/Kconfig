@@ -19,6 +19,17 @@ config LEDS_TRIGGER_TIMER
 
 	  If unsure, say Y.
 
+config LEDS_TRIGGER_NOTIFICATION
+	tristate "LED Notification Trigger"
+	depends on LEDS_TRIGGERS
+	help
+	  This allows LEDs to be controlled by a programmable timer
+	  via sysfs. Some LED hardware can be programmed to start
+	  blinking the LED without any further software interaction.
+	  This is the same behavior as the LEDS_TRIGGER_TIMER, the attribute
+	  are exposed with other rights
+
+
 config LEDS_TRIGGER_ONESHOT
 	tristate "LED One-shot Trigger"
 	depends on LEDS_TRIGGERS
