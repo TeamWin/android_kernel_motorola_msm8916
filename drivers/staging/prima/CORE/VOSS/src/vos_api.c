@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -74,8 +74,8 @@
 
 #include "sapApi.h"
 #include "vos_trace.h"
-
-
+#include "vos_utils.h"
+#include <wlan_logging_sock_svc.h>
 
 #ifdef WLAN_BTAMP_FEATURE
 #include "bapApi.h"
@@ -419,6 +419,13 @@ VOS_STATUS vos_open( v_CONTEXT_t *pVosContext, void *devHandle )
                "%s: Failed to open TL", __func__);
      VOS_ASSERT(0);
      goto err_sme_close;
+   }
+
+   if (gpVosContext->roamDelayStatsEnabled &&
+       !vos_roam_delay_stats_init())
+   {
+       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+                 "%s: Could not init roamDelayStats", __func__);
    }
 
    VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO_HIGH,
@@ -976,6 +983,13 @@ VOS_STATUS vos_close( v_CONTEXT_t vosContext )
      VOS_ASSERT( VOS_IS_STATUS_SUCCESS( vosStatus ) );
   }
 
+  if (gpVosContext->roamDelayStatsEnabled &&
+      !vos_roam_delay_stats_deinit())
+  {
+      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+                "%s: Could not deinit roamDelayStats", __func__);
+  }
+
   return VOS_STATUS_SUCCESS;
 }
                   
@@ -1446,7 +1460,30 @@ VOS_STATUS vos_free_context( v_VOID_t *pVosContext, VOS_MODULE_ID moduleID,
   return VOS_STATUS_SUCCESS;
 
 } /* vos_free_context() */
-                                                 
+
+/**---------------------------------------------------------------------------
+
+  \brief vos_logger_pkt_serialize() - queue a logging vos pkt
+
+  This API allows single vos pkt to be queued and later sent to userspace by
+  logger thread.
+
+  \param pPacket - a pointer to a vos pkt to be queued
+         pkt_type - type of pkt to be queued
+                    LOG_PKT_TYPE_DATA_MGMT - frame log i.e data/mgmt pkts
+
+  \return VOS_STATUS_SUCCESS - the pkt has been successfully queued.
+          VOS_STATUS_E_FAILURE - the pkt queue handler has reported
+          a failure.
+  --------------------------------------------------------------------------*/
+VOS_STATUS vos_logger_pkt_serialize( vos_pkt_t *pPacket, uint32 pkt_type)
+{
+#ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
+      return wlan_queue_logpkt_for_app(pPacket, pkt_type);
+#else
+      return vos_pkt_return_packet(pPacket);
+#endif
+}
 
 /**---------------------------------------------------------------------------
   
@@ -1926,6 +1963,7 @@ vos_fetch_tl_cfg_parms
   pTLConfig->ucAcWeights[1] = pConfig->WfqBeWeight;
   pTLConfig->ucAcWeights[2] = pConfig->WfqViWeight;
   pTLConfig->ucAcWeights[3] = pConfig->WfqVoWeight;
+  pTLConfig->ucAcWeights[4] = pConfig->WfqVoWeight;
   pTLConfig->ucReorderAgingTime[0] = pConfig->BkReorderAgingTime;/*WLANTL_AC_BK*/
   pTLConfig->ucReorderAgingTime[1] = pConfig->BeReorderAgingTime;/*WLANTL_AC_BE*/
   pTLConfig->ucReorderAgingTime[2] = pConfig->ViReorderAgingTime;/*WLANTL_AC_VI*/
@@ -1940,28 +1978,6 @@ v_BOOL_t vos_is_apps_power_collapse_allowed(void* pHddCtx)
   return hdd_is_apps_power_collapse_allowed((hdd_context_t*) pHddCtx);
 }
 
-void vos_abort_mac_scan(v_U8_t sessionId)
-{
-    hdd_context_t *pHddCtx = NULL;
-    v_CONTEXT_t pVosContext        = NULL;
-
-    /* Get the Global VOSS Context */
-    pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
-    if(!pVosContext) {
-       hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Global VOS context is Null", __func__);
-       return;
-    }
-    
-    /* Get the HDD context */
-    pHddCtx = (hdd_context_t *)vos_get_context(VOS_MODULE_ID_HDD, pVosContext );
-    if(!pHddCtx) {
-       hddLog(VOS_TRACE_LEVEL_FATAL, "%s: HDD context is Null", __func__);
-       return;
-    }
-
-    hdd_abort_mac_scan(pHddCtx, sessionId, eCSR_SCAN_ABORT_DEFAULT);
-    return;
-}
 /*---------------------------------------------------------------------------
 
   \brief vos_shutdown() - shutdown VOS
@@ -2189,18 +2205,19 @@ VOS_STATUS vos_wlanRestart(void)
   This function is called to issue dump commands to Firmware
 
   @param
-       cmd - Command No. to execute
-       arg1 - argument 1 to cmd
-       arg2 - argument 2 to cmd
-       arg3 - argument 3 to cmd
-       arg4 - argument 4 to cmd
+       cmd     -  Command No. to execute
+       arg1    -  argument 1 to cmd
+       arg2    -  argument 2 to cmd
+       arg3    -  argument 3 to cmd
+       arg4    -  argument 4 to cmd
+       async   -  asynchronous event. Don't wait for completion.
   @return
        NONE
 */
 v_VOID_t vos_fwDumpReq(tANI_U32 cmd, tANI_U32 arg1, tANI_U32 arg2,
-                        tANI_U32 arg3, tANI_U32 arg4)
+                        tANI_U32 arg3, tANI_U32 arg4, tANI_U8 async)
 {
-   WDA_HALDumpCmdReq(NULL, cmd, arg1, arg2, arg3, arg4, NULL);
+   WDA_HALDumpCmdReq(NULL, cmd, arg1, arg2, arg3, arg4, NULL, async);
 }
 
 v_U64_t vos_get_monotonic_boottime(void)
@@ -2232,3 +2249,159 @@ VOS_STATUS  vos_randomize_n_bytes(void *start_addr, tANI_U32 n)
 
     return eHAL_STATUS_SUCCESS;
 }
+
+/**---------------------------------------------------------------------------
+
+  \brief vos_is_wlan_in_badState() - get isFatalError flag from WD Ctx
+
+  \param  - VOS_MODULE_ID   - module id
+          - moduleContext   - module context
+
+  \return -  isFatalError value if WDCtx is valid otherwise true
+
+  --------------------------------------------------------------------------*/
+v_BOOL_t vos_is_wlan_in_badState(VOS_MODULE_ID moduleId,
+                                 v_VOID_t *moduleContext)
+{
+    struct _VosWatchdogContext *pVosWDCtx = get_vos_watchdog_ctxt();
+
+    if (pVosWDCtx == NULL){
+        VOS_TRACE(moduleId, VOS_TRACE_LEVEL_ERROR,
+                "%s: global wd context is null", __func__);
+
+        return TRUE;
+    }
+    return pVosWDCtx->isFatalError;
+}
+
+/**---------------------------------------------------------------------------
+
+  \brief vos_is_fw_logging_enabled() -
+
+  API to check if firmware is configured to send logs using DXE channel
+
+  \param  -  None
+
+  \return -  0: firmware logging is not enabled (it may or may not
+                be supported)
+             1: firmware logging is enabled
+
+  --------------------------------------------------------------------------*/
+v_U8_t vos_is_fw_logging_enabled(void)
+{
+   return hdd_is_fw_logging_enabled();
+}
+
+/**---------------------------------------------------------------------------
+
+  \brief vos_is_fw_logging_supported() -
+
+  API to check if firmware supports to send logs using DXE channel
+
+  \param  -  None
+
+  \return -  0: firmware logging is not supported
+             1: firmware logging is supported
+
+  --------------------------------------------------------------------------*/
+v_U8_t vos_is_fw_logging_supported(void)
+{
+   return IS_FRAME_LOGGING_SUPPORTED_BY_FW;
+}
+/**---------------------------------------------------------------------------
+
+  \brief vos_set_roam_delay_stats_enabled() -
+
+  API to set value of roamDelayStatsEnabled in vos context
+
+  \param  -  value to be updated
+
+  \return -  NONE
+
+  --------------------------------------------------------------------------*/
+
+v_VOID_t  vos_set_roam_delay_stats_enabled(v_U8_t value)
+{
+    gpVosContext->roamDelayStatsEnabled = value;
+}
+
+
+/**---------------------------------------------------------------------------
+
+  \brief vos_get_roam_delay_stats_enabled() -
+
+  API to get value of roamDelayStatsEnabled from vos context
+
+  \param  -  NONE
+
+  \return -  value of roamDelayStatsEnabled
+
+  --------------------------------------------------------------------------*/
+
+v_U8_t  vos_get_roam_delay_stats_enabled(v_VOID_t)
+{
+    return gpVosContext->roamDelayStatsEnabled;
+}
+
+v_U32_t vos_get_dxeReplenishRXTimerVal(void)
+{
+    hdd_context_t *pHddCtx = NULL;
+    v_CONTEXT_t pVosContext = NULL;
+
+    /* Get the Global VOSS Context */
+    pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+    if(!pVosContext) {
+       hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Global VOS context is Null", __func__);
+       return 0;
+    }
+
+    /* Get the HDD context */
+    pHddCtx = (hdd_context_t *)vos_get_context(VOS_MODULE_ID_HDD, pVosContext );
+    if(!pHddCtx) {
+       hddLog(VOS_TRACE_LEVEL_FATAL, "%s: HDD context is Null", __func__);
+       return 0;
+     }
+
+   return pHddCtx->cfg_ini->dxeReplenishRXTimerVal;
+}
+
+v_BOOL_t vos_get_dxeSSREnable(void)
+{
+    hdd_context_t *pHddCtx = NULL;
+    v_CONTEXT_t pVosContext = NULL;
+
+    /* Get the Global VOSS Context */
+    pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+    if(!pVosContext) {
+       hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Global VOS context is Null", __func__);
+       return FALSE;
+    }
+
+    /* Get the HDD context */
+    pHddCtx = (hdd_context_t *)vos_get_context(VOS_MODULE_ID_HDD, pVosContext );
+    if(!pHddCtx) {
+       hddLog(VOS_TRACE_LEVEL_FATAL, "%s: HDD context is Null", __func__);
+       return FALSE;
+     }
+
+   return pHddCtx->cfg_ini->dxeSSREnable;
+}
+
+v_VOID_t vos_flush_work(struct work_struct *work)
+{
+#if defined (WLAN_OPEN_SOURCE)
+   cancel_work_sync(work);
+#else
+   wcnss_flush_work(work);
+#endif
+}
+
+v_VOID_t vos_flush_delayed_work(struct delayed_work *dwork)
+{
+#if defined (WLAN_OPEN_SOURCE)
+   cancel_delayed_work_sync(dwork);
+#else
+   wcnss_flush_delayed_work(dwork);
+#endif
+}
+

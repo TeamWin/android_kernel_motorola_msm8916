@@ -33,9 +33,6 @@
 
   \author Sunit Bhatia
 
-   Copyright 2008 (c) Qualcomm, Incorporated.  All Rights Reserved.
-
-   Qualcomm Confidential and Proprietary.
 
   ========================================================================*/
 
@@ -841,8 +838,8 @@ tANI_U8* macTraceGetLimMsgString( tANI_U16 limMsg )
         CASE_RETURN_STRING(SIR_LIM_DISASSOC_ACK_TIMEOUT);
         CASE_RETURN_STRING(SIR_LIM_DEAUTH_ACK_TIMEOUT);
         CASE_RETURN_STRING(SIR_LIM_PERIODIC_JOIN_PROBE_REQ_TIMEOUT);
+        CASE_RETURN_STRING(SIR_LIM_AUTH_RETRY_TIMEOUT);
         CASE_RETURN_STRING(SIR_LIM_MSG_TYPES_END);
-
         default:
             return( (tANI_U8*)"UNKNOWN" );
             break;

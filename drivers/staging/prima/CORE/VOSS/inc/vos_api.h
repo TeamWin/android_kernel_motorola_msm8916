@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -36,9 +36,6 @@
                
    Header file that inludes all the vOSS API definitions.
   
-   Copyright 2008 (c) Qualcomm, Incorporated.  All Rights Reserved.
-   
-   Qualcomm Confidential and Proprietary.
   
   ========================================================================*/
  /*=========================================================================== 
@@ -178,6 +175,7 @@ void vos_set_load_unload_in_progress(VOS_MODULE_ID moduleId, v_U8_t value);
 
 v_U8_t vos_is_reinit_in_progress(VOS_MODULE_ID moduleId, v_VOID_t *moduleContext);
 void vos_set_reinit_in_progress(VOS_MODULE_ID moduleId, v_U8_t value);
+VOS_STATUS vos_logger_pkt_serialize(vos_pkt_t *pPacket, uint32 pkt_type);
 
 /**---------------------------------------------------------------------------
   
@@ -254,9 +252,7 @@ VOS_STATUS vos_alloc_context( v_VOID_t *pVosContext, VOS_MODULE_ID moduleID,
   --------------------------------------------------------------------------*/
 VOS_STATUS vos_free_context( v_VOID_t *pVosContext, VOS_MODULE_ID moduleID,
                              v_VOID_t *pModuleContext );
-                             
 v_BOOL_t vos_is_apps_power_collapse_allowed(void* pHddCtx);
-void vos_abort_mac_scan(tANI_U8 sessionId);
 
 /**
   @brief vos_wlanShutdown() - This API will shutdown WLAN driver
@@ -316,19 +312,34 @@ VOS_STATUS vos_wlanRestart(void);
   This function is called to issue dump commands to Firmware
 
   @param
-       cmd - Command No. to execute
-       arg1 - argument 1 to cmd
-       arg2 - argument 2 to cmd
-       arg3 - argument 3 to cmd
-       arg4 - argument 4 to cmd
+       cmd     -  Command No. to execute
+       arg1    -  argument 1 to cmd
+       arg2    -  argument 2 to cmd
+       arg3    -  argument 3 to cmd
+       arg4    -  argument 4 to cmd
+       async   -  asynchronous event. Don't wait for completion.
   @return
        NONE
 */
 v_VOID_t vos_fwDumpReq(tANI_U32 cmd, tANI_U32 arg1, tANI_U32 arg2,
-                        tANI_U32 arg3, tANI_U32 arg4);
+                        tANI_U32 arg3, tANI_U32 arg4, tANI_U8 async);
+
+v_VOID_t vos_flush_work(struct work_struct *work);
+v_VOID_t vos_flush_delayed_work(struct delayed_work *dwork);
 
 v_U64_t vos_get_monotonic_boottime(void);
 
 VOS_STATUS vos_randomize_n_bytes(void *mac_addr, tANI_U32 n);
+
+v_BOOL_t vos_is_wlan_in_badState(VOS_MODULE_ID moduleId,
+                                 v_VOID_t *moduleContext);
+v_VOID_t  vos_set_roam_delay_stats_enabled(v_U8_t value);
+v_U8_t    vos_get_roam_delay_stats_enabled(v_VOID_t);
+v_U32_t   vos_get_dxeReplenishRXTimerVal(void);
+v_BOOL_t  vos_get_dxeSSREnable(void);
+
+v_U8_t vos_is_fw_logging_enabled(void);
+
+v_U8_t vos_is_fw_logging_supported(void);
 
 #endif // if !defined __VOS_NVITEM_H

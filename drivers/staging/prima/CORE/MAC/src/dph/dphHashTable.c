@@ -285,6 +285,7 @@ tpDphHashNode dphInitStaState(tpAniSirGlobal pMac, tSirMacAddr staAddr,
     pStaDs->apsdMaxSpLen = 0;
     pStaDs->acMode[0] = pStaDs->acMode[1] = pStaDs->acMode[2] = pStaDs->acMode[3] =  0;
 #endif /* WMM_APSD */
+    pStaDs->isDisassocDeauthInProgress = 0;
     pStaDs->valid = 1;
     return pStaDs;
 }
@@ -312,9 +313,9 @@ tpDphHashNode dphAddHashEntry(tpAniSirGlobal pMac, tSirMacAddr staAddr, tANI_U16
     tpDphHashNode ptr, node;
     tANI_U16 index = hashFunction(pMac, staAddr, pDphHashTable->size);
 
-    PELOG1(limLog(pMac, LOG1, FL("assocId %d index %d STA addr"),
+    limLog(pMac, LOG1, FL("assocId %d index %d STA addr"),
            assocId, index);
-    dphPrintMacAddr(pMac, staAddr, LOG1);)
+    dphPrintMacAddr(pMac, staAddr, LOG1);
 
     if (assocId >= pDphHashTable->size)
     {
@@ -389,9 +390,9 @@ tSirRetStatus dphDeleteHashEntry(tpAniSirGlobal pMac, tSirMacAddr staAddr, tANI_
   tANI_U16 index = hashFunction(pMac, staAddr, pDphHashTable->size);
 
 
-  PELOG1(limLog(pMac, LOG1, FL("assocId %d index %d STA addr"),
+  limLog(pMac, LOG1, FL("assocId %d index %d STA addr"),
                   assocId, index);
-  dphPrintMacAddr(pMac, staAddr, LOG1);)
+  dphPrintMacAddr(pMac, staAddr, LOG1);
 
   if (assocId >= pDphHashTable->size)
   {
@@ -429,6 +430,7 @@ tSirRetStatus dphDeleteHashEntry(tpAniSirGlobal pMac, tSirMacAddr staAddr, tANI_
       else
          prev->next = ptr->next;
       ptr->added = 0;
+      ptr->isDisassocDeauthInProgress = 0;
       ptr->next = 0;
     }
   else

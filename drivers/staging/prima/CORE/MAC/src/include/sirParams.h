@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -104,9 +104,7 @@ typedef enum {
    UPDATE_CHANNEL_LIST    = 35,
    WLAN_MCADDR_FLT        = 36,
    WLAN_CH144             = 37,
-#ifdef WLAN_FEATURE_NAN
    NAN = 38,
-#endif
 #ifdef FEATURE_WLAN_TDLS
    TDLS_SCAN_COEXISTENCE  = 39,
 #endif
@@ -120,11 +118,17 @@ typedef enum {
 #endif
 
    DYNAMIC_WMM_PS        = 43,
-
    MAC_SPOOFED_SCAN      = 44,
    BMU_ERROR_GENERIC_RECOVERY = 45,
+   DISA                  = 46,
+   FW_STATS              = 47,
    WPS_PRBRSP_TMPL       = 48,
    BCN_IE_FLT_DELTA      = 49,
+#ifdef FEATURE_WLAN_TDLS
+   TDLS_OFF_CHANNEL      = 51,
+#endif
+   MGMT_FRAME_LOGGING    = 53,
+   ENHANCED_TXBD_COMPLETION = 54,
    //MAX_FEATURE_SUPPORTED = 128
 } placeHolderInCapBitmap;
 
@@ -328,6 +332,7 @@ typedef struct sSirMbMsgP2p
 
 // HAL message types
 #define SIR_HAL_MSG_TYPES_BEGIN            (SIR_HAL_MODULE_ID << 8)
+#define SIR_HAL_EXT_MSG_TYPES_BEGIN        (SIR_HAL_EXT_MODULE_ID << 8)
 #define SIR_HAL_ITC_MSG_TYPES_BEGIN        (SIR_HAL_MSG_TYPES_BEGIN+0x20)
 #define SIR_HAL_RADAR_DETECTED_IND         SIR_HAL_ITC_MSG_TYPES_BEGIN
 #define SIR_HAL_WDT_KAM_RSP                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 1)
@@ -691,8 +696,17 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_TDLS_CHAN_SWITCH_REQ_RSP      (SIR_HAL_ITC_MSG_TYPES_BEGIN + 259)
 #endif
 #define SIR_HAL_SPOOF_MAC_ADDR_REQ            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 260)
+#define SIR_HAL_SPOOF_MAC_ADDR_RSP            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 261)
 
-#define SIR_HAL_RECEIVE_FILTER_SET_FILTER_MC_REQ (SIR_HAL_ITC_MSG_TYPES_BEGIN + 261) // IKJB42MAIN-1244, Motorola, a19091
+#define SIR_HAL_FW_STATS_GET_REQ              (SIR_HAL_ITC_MSG_TYPES_BEGIN + 262)
+
+#define SIR_HAL_ENCRYPT_MSG_REQ               (SIR_HAL_ITC_MSG_TYPES_BEGIN + 263)
+#define SIR_HAL_ENCRYPT_MSG_RSP               (SIR_HAL_ITC_MSG_TYPES_BEGIN + 264)
+
+#define SIR_HAL_MGMT_LOGGING_INIT_REQ         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 265)
+#define SIR_HAL_GET_FRAME_LOG_REQ             (SIR_HAL_ITC_MSG_TYPES_BEGIN + 266)
+
+#define SIR_HAL_NAN_REQUEST                   (SIR_HAL_ITC_MSG_TYPES_BEGIN + 267)
 
 #define SIR_HAL_MSG_TYPES_END              (SIR_HAL_MSG_TYPES_BEGIN + 0x1FF)
 // CFG message types
@@ -794,6 +808,8 @@ typedef struct sSirMbMsgP2p
 #define SIR_LIM_TDLS_LINK_SETUP_CNF_TIMEOUT (SIR_LIM_TIMEOUT_MSG_START + 0x2B)
 #endif
 #define SIR_LIM_CONVERT_ACTIVE_CHANNEL_TO_PASSIVE (SIR_LIM_TIMEOUT_MSG_START + 0x2C)
+#define SIR_LIM_AUTH_RETRY_TIMEOUT            (SIR_LIM_TIMEOUT_MSG_START + 0x2D)
+
 #define SIR_LIM_MSG_TYPES_END            (SIR_LIM_MSG_TYPES_BEGIN+0xFF)
 
 // SCH message types

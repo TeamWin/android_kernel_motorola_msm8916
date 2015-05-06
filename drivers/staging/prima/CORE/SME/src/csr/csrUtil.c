@@ -2056,8 +2056,39 @@ eHalStatus csrGetParsedBssDescriptionIEs(tHalHandle hHal, tSirBssDescription *pB
     return (status);
 }
 
+eHalStatus csrProcessGetFrameLogCommand( tpAniSirGlobal pMac,
+                                         tSmeCmd *pCommand )
+{
+   tAniGetFrameLogReq *pMsg;
+   tANI_U16 msgLen;
+   eHalStatus status = eHAL_STATUS_FAILURE;
 
+   msgLen = sizeof(tAniGetFrameLogReq);
 
+   if ( NULL == pCommand )
+   {
+       smsLog( pMac, LOGE, FL("cannot process. cmd is null") );
+       return eHAL_STATUS_FAILURE;
+   }
+
+   pMsg = vos_mem_malloc(msgLen);
+   if ( NULL == pMsg )
+   {
+       smsLog( pMac, LOGE, FL("fail to allocate memory") );
+       return eHAL_STATUS_FAILURE;
+   }
+
+   pMsg->msgType= pal_cpu_to_be16((tANI_U16)WDA_GET_FRAME_LOG_REQ);
+   pMsg->msgLen= pal_cpu_to_be16(msgLen);
+
+   pMsg->pDevContext = pCommand->u.getFramelogCmd.pDevContext;
+   pMsg->getFramelogCallback= pCommand->u.getFramelogCmd.getFramelogCallback;
+   pMsg->getFrameLogCmdFlag = pCommand->u.getFramelogCmd.getFrameLogCmdFlag;
+
+   status = palSendMBMessage(pMac->hHdd, pMsg);
+
+   return( status );
+}
 
 tANI_BOOLEAN csrIsNULLSSID( tANI_U8 *pBssSsid, tANI_U8 len )
 {
@@ -2169,7 +2200,15 @@ tANI_U32 csrTranslateToWNICfgDot11Mode(tpAniSirGlobal pMac, eCsrCfgDot11Mode csr
         }
         else
         {
-            ret = WNI_CFG_DOT11_MODE_11AC;
+#ifdef WLAN_FEATURE_11AC
+            if ( IS_FEATURE_SUPPORTED_BY_DRIVER(DOT11AC) &&
+                     IS_FEATURE_SUPPORTED_BY_FW(DOT11AC))
+                ret = WNI_CFG_DOT11_MODE_11AC;
+            else
+                ret = WNI_CFG_DOT11_MODE_11N;
+#else
+            ret = WNI_CFG_DOT11_MODE_11N;
+#endif
         }
         break;
     case eCSR_CFG_DOT11_MODE_TAURUS:
@@ -2194,19 +2233,27 @@ tANI_U32 csrTranslateToWNICfgDot11Mode(tpAniSirGlobal pMac, eCsrCfgDot11Mode csr
         ret = WNI_CFG_DOT11_MODE_TITAN;
         break;
     case eCSR_CFG_DOT11_MODE_11G_ONLY:
-       ret = WNI_CFG_DOT11_MODE_11G_ONLY;
-       break;
+        ret = WNI_CFG_DOT11_MODE_11G_ONLY;
+        break;
     case eCSR_CFG_DOT11_MODE_11N_ONLY:
-       ret = WNI_CFG_DOT11_MODE_11N_ONLY;
-       break;
+        ret = WNI_CFG_DOT11_MODE_11N_ONLY;
+        break;
 
 #ifdef WLAN_FEATURE_11AC
-     case eCSR_CFG_DOT11_MODE_11AC_ONLY:
-        ret = WNI_CFG_DOT11_MODE_11AC_ONLY;
+    case eCSR_CFG_DOT11_MODE_11AC_ONLY:
+        if ( IS_FEATURE_SUPPORTED_BY_DRIVER(DOT11AC) &&
+             IS_FEATURE_SUPPORTED_BY_FW(DOT11AC))
+            ret = WNI_CFG_DOT11_MODE_11AC_ONLY;
+        else
+            ret = WNI_CFG_DOT11_MODE_11N;
         break;
-     case eCSR_CFG_DOT11_MODE_11AC:
-        ret = WNI_CFG_DOT11_MODE_11AC;
-       break;
+    case eCSR_CFG_DOT11_MODE_11AC:
+        if ( IS_FEATURE_SUPPORTED_BY_DRIVER(DOT11AC) &&
+             IS_FEATURE_SUPPORTED_BY_FW(DOT11AC))
+             ret = WNI_CFG_DOT11_MODE_11AC;
+        else
+            ret = WNI_CFG_DOT11_MODE_11N;
+        break;
 #endif
     default:
         smsLog(pMac, LOGW, FL("doesn't expect %d as csrDo11Mode"), csrDot11Mode);
@@ -3918,6 +3965,7 @@ tANI_U8 csrConstructRSNIe( tHalHandle hHal, tANI_U32 sessionId, tCsrRoamProfile 
     tANI_U8 *pGroupMgmtCipherSuite;
 #endif
     tDot11fBeaconIEs *pIesLocal = pIes;
+    eCsrAuthType negAuthType = eCSR_AUTH_TYPE_UNKNOWN;
 
     smsLog(pMac, LOGW, "%s called...", __func__);
 
@@ -3933,7 +3981,7 @@ tANI_U8 csrConstructRSNIe( tHalHandle hHal, tANI_U32 sessionId, tCsrRoamProfile 
         // See if the cyphers in the Bss description match with the settings in the profile.
         fRSNMatch = csrGetRSNInformation( hHal, &pProfile->AuthType, pProfile->negotiatedUCEncryptionType, 
                                             &pProfile->mcEncryptionType, &pIesLocal->RSN,
-                                            UnicastCypher, MulticastCypher, AuthSuite, &RSNCapabilities, NULL, NULL );
+                                            UnicastCypher, MulticastCypher, AuthSuite, &RSNCapabilities, &negAuthType, NULL );
         if ( !fRSNMatch ) break;
 
         pRSNIe->IeHeader.ElementID = SIR_MAC_RSN_EID;
@@ -3965,7 +4013,11 @@ tANI_U8 csrConstructRSNIe( tHalHandle hHal, tANI_U32 sessionId, tCsrRoamProfile 
 
         pPMK = (tCsrRSNPMKIe *)( ((tANI_U8 *)(&pAuthSuite->AuthOui[ 1 ])) + sizeof(tANI_U16) );
 
-        if( csrLookupPMKID( pMac, sessionId, pSirBssDesc->bssId, &(PMKId[0]) ) )
+        if (
+#ifdef FEATURE_WLAN_ESE
+        (eCSR_AUTH_TYPE_CCKM_RSN != negAuthType) &&
+#endif
+        csrLookupPMKID( pMac, sessionId, pSirBssDesc->bssId, &(PMKId[0]) ) )
         {
             pPMK->cPMKIDs = 1;
 
@@ -5724,7 +5776,7 @@ tANI_BOOLEAN csrMatchBSS( tHalHandle hHal, tSirBssDescription *pBssDesc, tCsrSca
             break;
 
 #ifdef WLAN_FEATURE_VOWIFI_11R
-        if (pFilter->MDID.mdiePresent)
+        if (pFilter->MDID.mdiePresent && csrRoamIs11rAssoc(pMac))
         {
             if (pBssDesc->mdiePresent)
             {
@@ -5817,6 +5869,103 @@ tANI_BOOLEAN csrMatchBSSToConnectProfile( tHalHandle hHal, tCsrRoamConnectedProf
     }
 
     return( fRC );
+}
+
+
+
+void csrAddRateBitmap(tANI_U8 rate, tANI_U16 *pRateBitmap)
+{
+    tANI_U16 rateBitmap;
+    tANI_U16 n = BITS_OFF( rate, CSR_DOT11_BASIC_RATE_MASK );
+    rateBitmap = *pRateBitmap;
+    switch(n)
+    {
+       case SIR_MAC_RATE_1:
+            rateBitmap |= SIR_MAC_RATE_1_BITMAP;
+            break;
+        case SIR_MAC_RATE_2:
+            rateBitmap |= SIR_MAC_RATE_2_BITMAP;
+            break;
+        case SIR_MAC_RATE_5_5:
+            rateBitmap |= SIR_MAC_RATE_5_5_BITMAP;
+            break;
+        case SIR_MAC_RATE_11:
+            rateBitmap |= SIR_MAC_RATE_11_BITMAP;
+            break;
+        case SIR_MAC_RATE_6:
+            rateBitmap |= SIR_MAC_RATE_6_BITMAP;
+            break;
+        case SIR_MAC_RATE_9:
+            rateBitmap |= SIR_MAC_RATE_9_BITMAP;
+            break;
+        case SIR_MAC_RATE_12:
+            rateBitmap |= SIR_MAC_RATE_12_BITMAP;
+            break;
+        case SIR_MAC_RATE_18:
+            rateBitmap |= SIR_MAC_RATE_18_BITMAP;
+            break;
+        case SIR_MAC_RATE_24:
+            rateBitmap |= SIR_MAC_RATE_24_BITMAP;
+            break;
+        case SIR_MAC_RATE_36:
+            rateBitmap |= SIR_MAC_RATE_36_BITMAP;
+            break;
+        case SIR_MAC_RATE_48:
+            rateBitmap |= SIR_MAC_RATE_48_BITMAP;
+            break;
+        case SIR_MAC_RATE_54:
+            rateBitmap |= SIR_MAC_RATE_54_BITMAP;
+            break;
+    }
+    *pRateBitmap = rateBitmap;
+}
+
+
+
+tANI_BOOLEAN csrIsRateAlreadyPresent(tANI_U8 rate, tANI_U16 rateBitmap)
+{
+    tANI_U16 n = BITS_OFF( rate, CSR_DOT11_BASIC_RATE_MASK );
+
+    switch(n)
+    {
+        case SIR_MAC_RATE_1:
+            rateBitmap &= SIR_MAC_RATE_1_BITMAP;
+            break;
+        case SIR_MAC_RATE_2:
+            rateBitmap &= SIR_MAC_RATE_2_BITMAP;
+            break;
+        case SIR_MAC_RATE_5_5:
+            rateBitmap &= SIR_MAC_RATE_5_5_BITMAP;
+            break;
+        case SIR_MAC_RATE_11:
+            rateBitmap &= SIR_MAC_RATE_11_BITMAP;
+            break;
+        case SIR_MAC_RATE_6:
+            rateBitmap &= SIR_MAC_RATE_6_BITMAP;
+            break;
+        case SIR_MAC_RATE_9:
+            rateBitmap &= SIR_MAC_RATE_9_BITMAP;
+            break;
+        case SIR_MAC_RATE_12:
+            rateBitmap &= SIR_MAC_RATE_12_BITMAP;
+            break;
+        case SIR_MAC_RATE_18:
+            rateBitmap &= SIR_MAC_RATE_18_BITMAP;
+            break;
+        case SIR_MAC_RATE_24:
+            rateBitmap &= SIR_MAC_RATE_24_BITMAP;
+            break;
+        case SIR_MAC_RATE_36:
+            rateBitmap &= SIR_MAC_RATE_36_BITMAP;
+            break;
+        case SIR_MAC_RATE_48:
+            rateBitmap &= SIR_MAC_RATE_48_BITMAP;
+            break;
+        case SIR_MAC_RATE_54:
+            rateBitmap &= SIR_MAC_RATE_54_BITMAP;
+            break;
+    }
+    return !!rateBitmap;
 }
 
 
@@ -5988,7 +6137,7 @@ void csrReleaseProfile(tpAniSirGlobal pMac, tCsrRoamProfile *pProfile)
 
         if (pProfile->nAddIEScanLength)
         {
-           memset(pProfile->addIEScan, 0 , SIR_MAC_MAX_IE_LENGTH+2);
+           memset(pProfile->addIEScan, 0 , SIR_MAC_MAX_ADD_IE_LENGTH+2);
            pProfile->nAddIEScanLength = 0;
         }
 

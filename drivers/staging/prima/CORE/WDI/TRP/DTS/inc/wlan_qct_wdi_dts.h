@@ -41,8 +41,6 @@
  * This file contains the API exposed by the 
  * wlan device abstarction layer module for abstracting DXE/SDIO.
  *
- * Copyright (c) 2008 QUALCOMM Incorporated. All Rights Reserved.
- * Qualcomm Confidential and Proprietary
  *
  * Example usage for DXE.
  * ----------------------
@@ -74,8 +72,15 @@ typedef enum
    WDTS_CHANNEL_TX_HIGH_PRI,
    WDTS_CHANNEL_RX_LOW_PRI,
    WDTS_CHANNEL_RX_HIGH_PRI,
+   WDTS_CHANNEL_RX_LOG,
    WDTS_CHANNEL_MAX
 }  WDTS_ChannelType;
+
+#define WDTS_TRANSPORT_CHANNELS_MASK \
+        (1<<WDTS_CHANNEL_TX_LOW_PRI | 1<<WDTS_CHANNEL_TX_HIGH_PRI \
+         | 1<<WDTS_CHANNEL_RX_LOW_PRI | 1<<WDTS_CHANNEL_RX_HIGH_PRI)
+
+#define WDTS_RX_LOG_CHANNEL_MASK (1<<WDTS_CHANNEL_RX_LOG)
 
 typedef enum
 {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -158,8 +158,6 @@ WLANSAP_Open
         return VOS_STATUS_E_FAULT;
     }
 
-    vos_mem_zero(pSapCtx, sizeof(tSapContext));
-
     /*------------------------------------------------------------------------
         Clean up SAP control block, initialize all values
     ------------------------------------------------------------------------*/
@@ -259,7 +257,12 @@ WLANSAP_Start
         return VOS_STATUS_E_FAULT;
     }
 
-
+    if (!VOS_IS_STATUS_SUCCESS(vos_spin_lock_init(&pSapCtx->staInfo_lock)))
+    {
+        VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                 "WLANSAP_Start failed init staInfo_lock\n");
+        return VOS_STATUS_E_FAULT;
+    }
 
     return VOS_STATUS_SUCCESS;
 }/* WLANSAP_Start */
@@ -598,9 +601,6 @@ WLANSAP_StartBss
 
         //Set the BSSID to your "self MAC Addr" read the mac address from Configuation ITEM received from HDD
         pSapCtx->csrRoamProfile.BSSIDs.numOfBSSIDs = 1;
-        vos_mem_copy(pSapCtx->csrRoamProfile.BSSIDs.bssid,
-                     pSapCtx->self_mac_addr,
-                     sizeof( tCsrBssid ) );
 
         //Save a copy to SAP context
         vos_mem_copy(pSapCtx->csrRoamProfile.BSSIDs.bssid,
@@ -2399,7 +2399,7 @@ void WLANSAP_PopulateDelStaParams(const v_U8_t *mac,
             vos_mem_copy(pDelStaParams->peerMacAddr, mac, VOS_MAC_ADDR_SIZE);
 
         if (reason_code == 0)
-            pDelStaParams->reason_code = eCsrForcedDeauthSta;
+            pDelStaParams->reason_code = eSIR_MAC_DEAUTH_LEAVING_BSS_REASON;
         else
             pDelStaParams->reason_code = reason_code;
 

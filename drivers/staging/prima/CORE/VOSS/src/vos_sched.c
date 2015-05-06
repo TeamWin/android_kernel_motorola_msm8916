@@ -29,9 +29,6 @@
   @file vos_sched.c
   @brief VOS Scheduler Implementation
 
-  Copyright (c) 2011 QUALCOMM Incorporated.
-  All Rights Reserved.
-  Qualcomm Confidential and Proprietary
 ===========================================================================*/
 /*===========================================================================
                        EDIT HISTORY FOR FILE
@@ -623,20 +620,6 @@ VosMCThread
       "%s: MC Thread exiting!!!!", __func__);
   complete_and_exit(&pSchedContext->McShutdown, 0);
 } /* VosMCThread() */
-
-v_BOOL_t isWDresetInProgress(void)
-{
-   VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-                "%s: Reset is in Progress...",__func__);
-   if(gpVosWatchdogContext!=NULL)
-   {
-      return gpVosWatchdogContext->resetInProgress;
-   }
-   else
-   {
-      return FALSE;
-   }
-}
 
 v_BOOL_t isSsrPanicOnFailure(void)
 {

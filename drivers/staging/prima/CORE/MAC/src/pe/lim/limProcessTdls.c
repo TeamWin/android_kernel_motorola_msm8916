@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -92,11 +92,6 @@ If there is other IOT issue because of this bandage, define NO_PAD...
 #define MIN_IEEE_8023_SIZE              46
 #define MIN_VENDOR_SPECIFIC_IE_SIZE     5
 #endif
-#ifdef WLAN_FEATURE_TDLS_DEBUG
-#define TDLS_DEBUG_LOG_LEVEL VOS_TRACE_LEVEL_ERROR
-#else
-#define TDLS_DEBUG_LOG_LEVEL VOS_TRACE_LEVEL_INFO
-#endif
 
 
 #ifdef FEATURE_WLAN_TDLS_INTERNAL
@@ -159,6 +154,9 @@ op_class_map_t global_op_class[] = {
     {125, 20, BW20,      {149, 153, 157, 161, 165, 169}},
     {126, 40, BW40PLUS,  {149, 157}},
     {127, 40, BW40MINUS, {153, 161}},
+    {128, 80, BW80,      {36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112,
+                          116, 120, 124, 128, 132, 136, 140, 144,
+                          149, 153, 157, 161}},
     {0, 0, 0, {0}},
 
 };/*end global_op_class*/
@@ -166,18 +164,22 @@ op_class_map_t global_op_class[] = {
 op_class_map_t us_op_class[] = {
     {1, 20,  BW20,       {36, 40, 44, 48}},
     {2, 20,  BW20,       {52, 56, 60, 64}},
-    {4, 20,  BW20,   {100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140}},
+    {4, 20,  BW20,   {100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144}},
     {5, 20,  BW20,       {149, 153, 157, 161, 165}},
+    {12, 25, BW20,      {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}},
     {22, 40, BW40PLUS,  {36, 44}},
     {23, 40, BW40PLUS,  {52, 60}},
-    {24, 40, BW40PLUS,  {100, 108, 116, 124, 132}},
+    {24, 40, BW40PLUS,  {100, 108, 116, 124, 132, 140}},
     {26, 40, BW40PLUS,  {149, 157}},
     {27, 40, BW40MINUS, {40, 48}},
     {28, 40, BW40MINUS, {56, 64}},
-    {29, 40, BW40MINUS, {104, 112, 120, 128, 136}},
+    {29, 40, BW40MINUS, {104, 112, 120, 128, 136, 144}},
     {31, 40, BW40MINUS, {153, 161}},
     {32, 40, BW40PLUS,  {1, 2, 3, 4, 5, 6, 7}},
     {33, 40, BW40MINUS, {5, 6, 7, 8, 9, 10, 11}},
+    {128, 80, BW80,     {36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112,
+                         116, 120, 124, 128, 132, 136, 140, 144,
+                         149, 153, 157, 161}},
     {0, 0, 0, {0}},
 };/*end us_op_class*/
 
@@ -195,6 +197,8 @@ op_class_map_t euro_op_class[] = {
     {11, 40, BW40PLUS,  {1, 2, 3, 4, 5, 6, 7, 8, 9}},
     {12, 40, BW40MINUS, {5, 6, 7, 8, 9, 10, 11, 12, 13}},
     {17, 20, BW20,      {149, 153, 157, 161, 165, 169}},
+    {128, 80, BW80,     {36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112,
+                         116, 120, 124, 128}},
     {0, 0, 0, {0}},
 };/*end euro_op_class*/
 
@@ -210,6 +214,8 @@ op_class_map_t japan_op_class[] = {
     {41, 40, BW40MINUS, {40, 48}},
     {42, 40, BW40MINUS, {56, 64}},
     {44, 40, BW40MINUS, {104, 112, 120, 128, 136}},
+    {128, 80, BW80,     {36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112,
+                         116, 120, 124, 128}},
     {0, 0, 0, {0}},
 };/*end japan_op_class*/
 
@@ -222,6 +228,12 @@ static const tANI_U8 eth_890d_header[] =
     0xaa, 0xaa, 0x03, 0x00, 
     0x00, 0x00, 0x89, 0x0d,
 } ;
+
+/* store tdls self supported channels
+ * which are non passive */
+#define LIM_TDLS_MAX_NON_DFS_CHANNELS 50
+static tANI_U8 tdlsSelfNumChans = 0;
+static tANI_U8 tdlsSelfSupportedChannels[LIM_TDLS_MAX_NON_DFS_CHANNELS] = {0};
 
 /*
  * type of links used in TDLS 
@@ -499,11 +511,12 @@ static tANI_U32 limPrepareTdlsFrameHeader(tpAniSirGlobal pMac, tANI_U8* pFrame,
                   (tANI_U8 *) (addr3),
                   sizeof( tSirMacAddr ));
 
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_WARN, ("Preparing TDLS frame header to %s\n%02x:%02x:%02x:%02x:%02x:%02x/%02x:%02x:%02x:%02x:%02x:%02x/%02x:%02x:%02x:%02x:%02x:%02x"),
-       (tdlsLinkType == TDLS_LINK_AP) ? "AP" : "TD",
-        pMacHdr->addr1[0], pMacHdr->addr1[1], pMacHdr->addr1[2], pMacHdr->addr1[3], pMacHdr->addr1[4], pMacHdr->addr1[5],
-        pMacHdr->addr2[0], pMacHdr->addr2[1], pMacHdr->addr2[2], pMacHdr->addr2[3], pMacHdr->addr2[4], pMacHdr->addr2[5],
-        pMacHdr->addr3[0], pMacHdr->addr3[1], pMacHdr->addr3[2], pMacHdr->addr3[3], pMacHdr->addr3[4], pMacHdr->addr3[5]));
+    limLog(pMac, LOG1,
+           FL("Preparing TDLS frame header to %s A1:"MAC_ADDRESS_STR", A2:"MAC_ADDRESS_STR", A3:"MAC_ADDRESS_STR),
+           (tdlsLinkType == TDLS_LINK_AP) ? "AP" : "DIRECT",
+           MAC_ADDR_ARRAY(pMacHdr->addr1),
+           MAC_ADDR_ARRAY(pMacHdr->addr2),
+           MAC_ADDR_ARRAY(pMacHdr->addr3));
 
     //printMacAddr(pMacHdr->bssId) ;
     //printMacAddr(pMacHdr->sa) ;
@@ -535,17 +548,38 @@ static tANI_U32 limPrepareTdlsFrameHeader(tpAniSirGlobal pMac, tANI_U8* pFrame,
  * TX Complete for Management frames
  */
  eHalStatus limMgmtTXComplete(tpAniSirGlobal pMac,
-                                   tANI_U32 txCompleteSuccess)
+                                   void *pData)
 {
     tpPESession psessionEntry = NULL ;
+    tANI_U32 txCompleteSuccess = 0;
+    tpSirTxBdStatus pTxBdStatus = NULL;
+
+    if (!pData)
+    {
+        limLog(pMac, LOGE, FL("pData is NULL"));
+        return eHAL_STATUS_SUCCESS;
+    }
+
+    if (IS_FEATURE_SUPPORTED_BY_FW(ENHANCED_TXBD_COMPLETION))
+    {
+        pTxBdStatus = (tpSirTxBdStatus) pData;
+        txCompleteSuccess = pTxBdStatus->txCompleteStatus;
+        limLog(pMac, LOG1, FL("txCompleteSuccess %u, token %u"),
+                txCompleteSuccess, pTxBdStatus->txBdToken);
+    }
+    else
+    {
+        txCompleteSuccess = *((tANI_U32*) pData);
+        limLog(pMac, LOG1, FL("txCompleteSuccess %u"), txCompleteSuccess);
+    }
 
     if (0xff != pMac->lim.mgmtFrameSessionId)
     {
         psessionEntry = peFindSessionBySessionId(pMac, pMac->lim.mgmtFrameSessionId);
         if (NULL == psessionEntry)
         {
-            VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR,
-                      ("%s: sessionID %d is not found"), __func__, pMac->lim.mgmtFrameSessionId);
+            limLog(pMac, LOGE, FL("sessionID %d is not found"),
+                               pMac->lim.mgmtFrameSessionId);
             return eHAL_STATUS_FAILURE;
         }
         limSendSmeMgmtTXCompletion(pMac, psessionEntry, txCompleteSuccess);
@@ -601,16 +635,17 @@ tSirRetStatus limSendTdlsDisReqFrame(tpAniSirGlobal pMac, tSirMacAddr peer_mac,
     status = dot11fGetPackedTDLSDisReqSize( pMac, &tdlsDisReq, &nPayload);
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
-                               "or a discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGE,
+               FL("Failed to calculate the packed size for a discovery Request (0x%08x)."),
+               status);
         /* We'll fall back on the worst case scenario: */
         nPayload = sizeof( tDot11fTDLSDisReq );
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while calculating "
-                               "the packed size for a discovery Request ("
-                               "0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while calculating the packed size for a discovery Request (0x%08x)."),
+               status);
     }
 
     /*
@@ -649,8 +684,9 @@ tSirRetStatus limSendTdlsDisReqFrame(tpAniSirGlobal pMac, tSirMacAddr peer_mac,
                              ( void** ) &pPacket );
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
-        limLog( pMac, LOGP, FL("Failed to allocate %d bytes for a TDLS"
-                               "Discovery Request."), nBytes );
+        limLog(pMac, LOGE,
+               FL("Failed to allocate %d bytes for a TDLS Discovery Request."),
+               nBytes);
         return eSIR_MEM_ALLOC_FAILED;
     }
 
@@ -682,16 +718,16 @@ tSirRetStatus limSendTdlsDisReqFrame(tpAniSirGlobal pMac, tSirMacAddr peer_mac,
 
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGE, FL("Failed to pack a TDLS discovery req "
-                               "(0x%08x)."), status );
+        limLog(pMac, LOGE, FL("Failed to pack a TDLS discovery req (0x%08x)."),
+               status);
         palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT, 
                                    ( void* ) pFrame, ( void* ) pPacket );
         return eSIR_FAILURE;
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while packing TDLS "
-                               "Discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGW, FL("There were warnings while packing TDLS Discovery Request (0x%08x)."),
+               status);
     }
 
 #ifndef NO_PAD_TDLS_MIN_8023_SIZE
@@ -706,8 +742,7 @@ tSirRetStatus limSendTdlsDisReqFrame(tpAniSirGlobal pMac, tSirMacAddr peer_mac,
         padVendorSpecific[3] = 0xA0;
         padVendorSpecific[4] = 0xC6;
 
-        LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO, ("Padding Vendor Specific Ie Len = %d"),
-                padLen ));
+        limLog(pMac, LOG1, FL("Padding Vendor Specific Ie Len = %d"), padLen);
 
         /* padding zero if more than 5 bytes are required */
         if (padLen > MIN_VENDOR_SPECIFIC_IE_SIZE)
@@ -716,8 +751,11 @@ tSirRetStatus limSendTdlsDisReqFrame(tpAniSirGlobal pMac, tSirMacAddr peer_mac,
     }
 #endif
 
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL, ("[TDLS] action %d (%s) -AP-> OTA "),
-            SIR_MAC_TDLS_DIS_REQ, limTraceTdlsActionString(SIR_MAC_TDLS_DIS_REQ) ));
+    limLog(pMac, LOG1,
+           FL("[TDLS] action %d (%s) -AP-> OTA peer="MAC_ADDRESS_STR),
+           SIR_MAC_TDLS_DIS_REQ,
+           limTraceTdlsActionString(SIR_MAC_TDLS_DIS_REQ),
+           MAC_ADDR_ARRAY(peer_mac));
 
     halstatus = halTxFrameWithTxComplete( pMac, pPacket, ( tANI_U16 ) nBytes,
                             HAL_TXRX_FRM_802_11_DATA,
@@ -725,11 +763,12 @@ tSirRetStatus limSendTdlsDisReqFrame(tpAniSirGlobal pMac, tSirMacAddr peer_mac,
                             TID_AC_VI,
                             limTxComplete, pFrame,
                             limMgmtTXComplete,
-                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME);
+                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME,
+                            pMac->lim.txBdToken++);
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
         pMac->lim.mgmtFrameSessionId = 0xff;
-        limLog( pMac, LOGE, FL("could not send TDLS Dis Request frame!" ));
+        limLog(pMac, LOGE, FL("could not send TDLS Discovery Request frame"));
         return eSIR_FAILURE;
     }
     pMac->lim.mgmtFrameSessionId = psessionEntry->peSessionId;
@@ -999,45 +1038,41 @@ static void PopulateDot11fTdlsHtVhtCap(tpAniSirGlobal pMac, uint32 selfDot11Mode
     {
         /* Include HT Capability IE */
         PopulateDot11fHTCaps( pMac, NULL, htCap );
+        /* Advertize ht capability and max supported channel
+         * bandwidth when populating HT IE in TDLS Setup Request/
+         * Setup Response/Setup Confirmation frames.
+         * 11.21.6.2 Setting up a 40 MHz direct link: A 40 MHz off-channel
+         * direct link may be started if both TDLS peer STAs indicated
+         * 40 MHz support in the Supported Channel Width Set field of the
+         * HT Capabilities element (which is included in the TDLS Setup Request
+         * frame and the TDLS Setup Response frame). Switching to a 40 MHz
+         * off-channel direct link is achieved by including the following
+         * information in the TDLS Channel Switch Request
+         * 11.21.1 General: The channel width of the TDLS direct link on the
+         * base channel shall not exceed the channel width of the BSS to which
+         * the TDLS peer STAs are associated.*/
         htCap->present = 1;
-        if (psessionEntry->currentOperChannel <= SIR_11B_CHANNEL_END)
-        {
-            /* hardcode NO channel bonding in 2.4Ghz */
-            htCap->supportedChannelWidthSet = 0;
-        }
-        else
-        {
-            //Placeholder to support different channel bonding mode of TDLS than AP.
-            //wlan_cfgGetInt(pMac,WNI_CFG_TDLS_CHANNEL_BONDING_MODE,&tdlsChannelBondingMode);
-            //htCap->supportedChannelWidthSet = tdlsChannelBondingMode ? 1 : 0;
-            htCap->supportedChannelWidthSet = 1; // hardcode it to max
-        }
+        htCap->supportedChannelWidthSet = 1; // hardcode it to max
     }
     else
     {
         htCap->present = 0;
     }
+    limLog(pMac, LOG1, FL("HT present = %hu, Chan Width = %hu"),
+            htCap->present, htCap->supportedChannelWidthSet);
 #ifdef WLAN_FEATURE_11AC
-    if (((psessionEntry->currentOperChannel <= SIR_11B_CHANNEL_END) &&
-          pMac->roam.configParam.enableVhtFor24GHz) ||
-         (psessionEntry->currentOperChannel >= SIR_11B_CHANNEL_END))
+    if (IS_DOT11_MODE_VHT(selfDot11Mode) &&
+        IS_FEATURE_SUPPORTED_BY_FW(DOT11AC))
     {
-        if (IS_DOT11_MODE_VHT(selfDot11Mode) &&
-            IS_FEATURE_SUPPORTED_BY_FW(DOT11AC))
-        {
-            /* Include VHT Capability IE */
-            PopulateDot11fVHTCaps( pMac, vhtCap, eSIR_FALSE );
-        }
-        else
-        {
-            vhtCap->present = 0;
-        }
+        /* Include VHT Capability IE */
+        PopulateDot11fVHTCaps( pMac, vhtCap, eSIR_FALSE );
     }
     else
     {
-        /* Vht Disable from ini in 2.4 GHz */
         vhtCap->present = 0;
     }
+    limLog(pMac, LOG1, FL("VHT present = %hu"),
+            vhtCap->present);
 #endif
 }
 
@@ -1051,7 +1086,7 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
                      tANI_U16 addIeLen)
 {
     tDot11fTDLSDisRsp   tdlsDisRsp ;
-    tANI_U16            caps = 0 ;            
+    tANI_U16            caps = 0 ;
     tANI_U32            status = 0 ;
     tANI_U32            nPayload = 0 ;
     tANI_U32            nBytes = 0 ;
@@ -1065,7 +1100,7 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
 //  As of now, we hardcoded to max channel bonding of dot11Mode (i.e HT80 for 11ac/HT40 for 11n)
 //  uint32 tdlsChannelBondingMode;
 
-    /* 
+    /*
      * The scheme here is to fill out a 'tDot11fProbeRequest' structure
      * and then hand it off to 'dot11fPackProbeRequest' (for
      * serialization).  We start by zero-initializing the structure:
@@ -1080,7 +1115,7 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
     tdlsDisRsp.Action.action     = SIR_MAC_TDLS_DIS_RSP ;
     tdlsDisRsp.DialogToken.token = dialog ;
 
-    PopulateDot11fLinkIden( pMac, psessionEntry, &tdlsDisRsp.LinkIdentifier, 
+    PopulateDot11fLinkIden( pMac, psessionEntry, &tdlsDisRsp.LinkIdentifier,
                                            peerMac, TDLS_RESPONDER) ;
 
     if (cfgGetCapabilityInfo(pMac, &caps, psessionEntry) != eSIR_SUCCESS)
@@ -1089,20 +1124,16 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
          * Could not get Capabilities value
          * from CFG. Log error.
          */
-         limLog(pMac, LOGP,
-                   FL("could not retrieve Capabilities value"));
+         limLog(pMac, LOGP, FL("could not retrieve Capabilities value"));
     }
     swapBitField16(caps, ( tANI_U16* )&tdlsDisRsp.Capabilities );
 
-    /* populate supported rate IE */
-    PopulateDot11fSuppRates( pMac, POPULATE_DOT11F_RATES_OPERATIONAL, 
-                                     &tdlsDisRsp.SuppRates, psessionEntry );
-   
-    /* Populate extended supported rates */
-    PopulateDot11fExtSuppRates( pMac, POPULATE_DOT11F_RATES_OPERATIONAL,
-                                &tdlsDisRsp.ExtSuppRates, psessionEntry );
+    /* populate supported rate and ext supported rate IE */
+    if (eSIR_FAILURE == PopulateDot11fRatesTdls(pMac, &tdlsDisRsp.SuppRates,
+                               &tdlsDisRsp.ExtSuppRates))
+        limLog(pMac, LOGE, FL("could not populate supported data rates"));
 
-    /* Populate extended supported rates */
+    /* Populate extended capability IE */
     PopulateDot11fTdlsExtCapability( pMac, &tdlsDisRsp.ExtCap );
 
     wlan_cfgGetInt(pMac,WNI_CFG_DOT11_MODE,&selfDot11Mode);
@@ -1116,11 +1147,14 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
                                             &tdlsDisRsp.SuppChannels,
                                             &tdlsDisRsp.SuppOperatingClasses);
 
-    if ( 1 == pMac->lim.gLimTDLSOffChannelEnabled &&
-         ( pMac->roam.configParam.bandCapability != eCSR_BAND_24) )
+    if (TRUE == pMac->lim.EnableTdls2040BSSCoexIE)
     {
-        tdlsDisRsp.HT2040BSSCoexistence.present = 1;
-        tdlsDisRsp.HT2040BSSCoexistence.infoRequest = 1;
+        if ( 1 == pMac->lim.gLimTDLSOffChannelEnabled &&
+            ( pMac->roam.configParam.bandCapability != eCSR_BAND_24) )
+        {
+            tdlsDisRsp.HT2040BSSCoexistence.present = 1;
+            tdlsDisRsp.HT2040BSSCoexistence.infoRequest = 1;
+        }
     }
     /* 
      * now we pack it.  First, how much space are we going to need?
@@ -1128,16 +1162,17 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
     status = dot11fGetPackedTDLSDisRspSize( pMac, &tdlsDisRsp, &nPayload);
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
-                               "or a discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGE,
+               FL("Failed to calculate the packed size for a Discovery Response (0x%08x)."),
+               status);
         /* We'll fall back on the worst case scenario: */
         nPayload = sizeof( tDot11fProbeRequest );
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while calculating "
-                               "the packed size for a discovery Request ("
-                               "0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while calculating the packed size for a Discovery Response (0x%08x)."),
+               status);
     }
 
     /*
@@ -1156,8 +1191,9 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
                              ( void** ) &pPacket );
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
-        limLog( pMac, LOGP, FL("Failed to allocate %d bytes for a TDLS"
-                               "Discovery Request."), nBytes );
+        limLog(pMac, LOGE,
+               FL("Failed to allocate %d bytes for a TDLS Discovery Response."),
+               nBytes);
         return eSIR_MEM_ALLOC_FAILED;
     }
 
@@ -1203,16 +1239,18 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
 
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGE, FL("Failed to pack a TDLS discovery req "
-                               "(0x%08x)."), status );
+        limLog( pMac, LOGE,
+                FL("Failed to pack a TDLS Discovery Response (0x%08x)."),
+                status);
         palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT, 
                                    ( void* ) pFrame, ( void* ) pPacket );
         return eSIR_FAILURE;
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while packing TDLS "
-                               "Discovery Request (0x%08x)."), status );
+        limLog( pMac, LOGW,
+                FL("There were warnings while packing TDLS Discovery Request (0x%08x)."),
+                status);
     }
 
 #if 0
@@ -1230,17 +1268,15 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
 #endif
     if (0 != addIeLen)
     {
-        LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR,
-                     ("Copy Additional Ie Len = %d"), addIeLen ));
+        limLog(pMac, LOG1, FL("Copy Additional Ie Len = %d"), addIeLen);
         vos_mem_copy(pFrame + sizeof(tSirMacMgmtHdr) + nPayload, addIe,
                                                               addIeLen);
     }
-    VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO, 
-                 ("transmitting Discovery response on direct link")) ;
-
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL, ("[TDLS] action %d (%s) -DIRECT-> OTA"),
-            SIR_MAC_TDLS_DIS_RSP, limTraceTdlsActionString(SIR_MAC_TDLS_DIS_RSP) ));
-
+    limLog(pMac, LOG1,
+           FL("[TDLS] action %d (%s) -DIRECT-> OTA peer="MAC_ADDRESS_STR),
+           SIR_MAC_TDLS_DIS_RSP,
+           limTraceTdlsActionString(SIR_MAC_TDLS_DIS_RSP),
+           MAC_ADDR_ARRAY(peerMac));
 
     /*
      * Transmit Discovery response and watch if this is delivered to
@@ -1252,11 +1288,12 @@ static tSirRetStatus limSendTdlsDisRspFrame(tpAniSirGlobal pMac,
                             0,
                             limTxComplete, pFrame, 
                             limMgmtTXComplete,
-                            HAL_USE_SELF_STA_REQUESTED_MASK );
+                            HAL_USE_SELF_STA_REQUESTED_MASK,
+                            pMac->lim.txBdToken++);
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
         pMac->lim.mgmtFrameSessionId = 0xff;
-        limLog( pMac, LOGE, FL("could not send TDLS Dis Request frame!" ));
+        limLog(pMac, LOGE, FL("could not send TDLS Discovery Response frame!"));
         return eSIR_FAILURE;
     }
     pMac->lim.mgmtFrameSessionId = psessionEntry->peSessionId;
@@ -1293,15 +1330,15 @@ static void PopulateDotfTdlsVhtAID(tpAniSirGlobal pMac, uint32 selfDot11Mode,
             else
             {
                 Aid->present = 0;
-                limLog( pMac, LOGE, FL("pStaDs is NULL for " MAC_ADDRESS_STR ),
-                        MAC_ADDR_ARRAY(peerMac));
+                limLog(pMac, LOGE, FL("pStaDs is NULL for " MAC_ADDRESS_STR),
+                                   MAC_ADDR_ARRAY(peerMac));
             }
         }
     }
     else
     {
         Aid->present = 0;
-        limLog( pMac, LOGW, FL("Vht not enable from ini for 2.4GHz."));
+        limLog(pMac, LOGW, FL("Vht not enable from ini for 2.4GHz."));
     }
 }
 
@@ -1323,6 +1360,7 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
     void               *pPacket;
     eHalStatus          halstatus;
     uint32              selfDot11Mode;
+    tpSirMacCapabilityInfo pCapInfo;
 //  Placeholder to support different channel bonding mode of TDLS than AP.
 //  Today, WNI_CFG_CHANNEL_BONDING_MODE will be overwritten when connecting to AP
 //  To support this feature, we need to introduce WNI_CFG_TDLS_CHANNEL_BONDING_MODE
@@ -1349,26 +1387,42 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
          * Could not get Capabilities value
          * from CFG. Log error.
          */
-         limLog(pMac, LOGP,
-                   FL("could not retrieve Capabilities value"));
+         limLog(pMac, LOGE, FL("could not retrieve Capabilities value"));
     }
+
+    pCapInfo = (tpSirMacCapabilityInfo) &caps;
+    /* Export QOS capability  */
+    pCapInfo->qos = 1;
+
     swapBitField16(caps, ( tANI_U16* )&tdlsSetupReq.Capabilities );
 
-    /* populate supported rate IE */
-    PopulateDot11fSuppRates( pMac, POPULATE_DOT11F_RATES_OPERATIONAL,
-                              &tdlsSetupReq.SuppRates, psessionEntry );
+    /* populate supported rate and ext supported rate IE */
+    PopulateDot11fRatesTdls(pMac, &tdlsSetupReq.SuppRates,
+                               &tdlsSetupReq.ExtSuppRates);
 
-    /* Populate extended supported rates */
-    PopulateDot11fExtSuppRates( pMac, POPULATE_DOT11F_RATES_OPERATIONAL,
-                                &tdlsSetupReq.ExtSuppRates, psessionEntry );
-
-    /* Populate extended supported rates */
+    /* Populate extended capability IE */
     PopulateDot11fTdlsExtCapability( pMac, &tdlsSetupReq.ExtCap );
 
     if ( 1 == pMac->lim.gLimTDLSWmmMode )
     {
+        tANI_U32  val = 0;
+
         /* include WMM IE */
-        PopulateDot11fWMMInfoStation( pMac, &tdlsSetupReq.WMMInfoStation );
+        tdlsSetupReq.WMMInfoStation.version = SIR_MAC_OUI_VERSION_1;
+        tdlsSetupReq.WMMInfoStation.acvo_uapsd =
+                     (pMac->lim.gLimTDLSUapsdMask & 0x01);
+        tdlsSetupReq.WMMInfoStation.acvi_uapsd =
+                     ((pMac->lim.gLimTDLSUapsdMask & 0x02) >> 1);
+        tdlsSetupReq.WMMInfoStation.acbk_uapsd =
+                     ((pMac->lim.gLimTDLSUapsdMask & 0x04) >> 2);
+        tdlsSetupReq.WMMInfoStation.acbe_uapsd =
+                     ((pMac->lim.gLimTDLSUapsdMask & 0x08) >> 3);
+
+        if(wlan_cfgGetInt(pMac, WNI_CFG_MAX_SP_LENGTH, &val) != eSIR_SUCCESS)
+           limLog(pMac, LOGE, FL("could not retrieve Max SP Length \n"));
+
+        tdlsSetupReq.WMMInfoStation.max_sp_length = (tANI_U8)val;
+        tdlsSetupReq.WMMInfoStation.present = 1;
     }
     else
     {
@@ -1381,6 +1435,7 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
         /* Populate QOS info, needed for Peer U-APSD session */
         /* TODO: Now hardcoded, because PopulateDot11fQOSCapsStation() depends on AP's capability, and
          TDLS doesn't want to depend on AP's capability */
+        limLog(pMac, LOG1, FL("populate QOS IE in Setup Request Frame"));
         tdlsSetupReq.QOSCapsStation.present = 1;
         tdlsSetupReq.QOSCapsStation.max_sp_length = 0;
         tdlsSetupReq.QOSCapsStation.qack = 0;
@@ -1411,11 +1466,14 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
                                             &tdlsSetupReq.SuppChannels,
                                             &tdlsSetupReq.SuppOperatingClasses);
 
-    if ( 1 == pMac->lim.gLimTDLSOffChannelEnabled &&
-         ( pMac->roam.configParam.bandCapability != eCSR_BAND_24))
+    if (TRUE == pMac->lim.EnableTdls2040BSSCoexIE)
     {
-        tdlsSetupReq.HT2040BSSCoexistence.present = 1;
-        tdlsSetupReq.HT2040BSSCoexistence.infoRequest = 1;
+        if ( 1 == pMac->lim.gLimTDLSOffChannelEnabled &&
+            ( pMac->roam.configParam.bandCapability != eCSR_BAND_24))
+        {
+            tdlsSetupReq.HT2040BSSCoexistence.present = 1;
+            tdlsSetupReq.HT2040BSSCoexistence.infoRequest = 1;
+        }
     }
 
     /*
@@ -1425,16 +1483,17 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
                                                               &nPayload);
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
-                               "or a discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGE,
+               FL("Failed to calculate the packed size for a Setup Request (0x%08x)."),
+               status);
         /* We'll fall back on the worst case scenario: */
         nPayload = sizeof( tDot11fProbeRequest );
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while calculating "
-                               "the packed size for a discovery Request ("
-                               "0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while calculating the packed size for a Setup Request (0x%08x)."),
+               status);
     }
 
 
@@ -1458,8 +1517,9 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
                              ( void** ) &pPacket );
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
-        limLog( pMac, LOGP, FL("Failed to allocate %d bytes for a TDLS"
-                               "Discovery Request."), nBytes );
+        limLog(pMac, LOGE,
+               FL("Failed to allocate %d bytes for a TDLS Setup Request."),
+               nBytes);
         return eSIR_MEM_ALLOC_FAILED;
     }
 
@@ -1486,25 +1546,29 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
          MAC_ADDR_ARRAY(tdlsSetupReq.LinkIdentifier.bssid));
     }
 #endif
-    limLog( pMac, LOGW, FL("%s: SupportedChnlWidth %x rxMCSMap %x rxMCSMap %x txSupDataRate %x"),
-            __func__, tdlsSetupReq.VHTCaps.supportedChannelWidthSet, tdlsSetupReq.VHTCaps.rxMCSMap,
-            tdlsSetupReq.VHTCaps.txMCSMap, tdlsSetupReq.VHTCaps.txSupDataRate );
+    limLog( pMac, LOGW, FL("SupportedChnlWidth %x rxMCSMap %x rxMCSMap %x txSupDataRate %x"),
+            tdlsSetupReq.VHTCaps.supportedChannelWidthSet,
+            tdlsSetupReq.VHTCaps.rxMCSMap,
+            tdlsSetupReq.VHTCaps.txMCSMap,
+            tdlsSetupReq.VHTCaps.txSupDataRate);
 
     status = dot11fPackTDLSSetupReq( pMac, &tdlsSetupReq, pFrame
                                + header_offset, nPayload, &nPayload );
 
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGE, FL("Failed to pack a TDLS discovery req "
-                               "(0x%08x)."), status );
+        limLog(pMac, LOGE,
+               FL("Failed to pack a TDLS Setup Request (0x%08x)."),
+                   status);
         palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT, 
                                    ( void* ) pFrame, ( void* ) pPacket );
         return eSIR_FAILURE;
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while packing TDLS "
-                               "Discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while packing TDLS Setup Request (0x%08x)."),
+               status);
     }
 
     //Copy the additional IE.
@@ -1513,13 +1577,15 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
     //if there is any IOT issue.
     if( addIeLen != 0 )
     {
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR, ("Copy Additional Ie Len = %d"),
-            addIeLen ));
-       vos_mem_copy( pFrame + header_offset + nPayload, addIe, addIeLen );
+        limLog(pMac, LOG1, FL("Copy Additional Ie Len = %d"),
+                           addIeLen);
+        vos_mem_copy( pFrame + header_offset + nPayload, addIe, addIeLen );
     }
 
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL, ("[TDLS] action %d (%s) -AP-> OTA"),
-            SIR_MAC_TDLS_SETUP_REQ, limTraceTdlsActionString(SIR_MAC_TDLS_SETUP_REQ) ));
+    limLog(pMac, LOG1, FL("[TDLS] action %d (%s) -AP-> OTA peer="MAC_ADDRESS_STR),
+                       SIR_MAC_TDLS_SETUP_REQ,
+                       limTraceTdlsActionString(SIR_MAC_TDLS_SETUP_REQ),
+                       MAC_ADDR_ARRAY(peerMac));
 
     halstatus = halTxFrameWithTxComplete( pMac, pPacket, ( tANI_U16 ) nBytes,
                             HAL_TXRX_FRM_802_11_DATA,
@@ -1527,12 +1593,13 @@ tSirRetStatus limSendTdlsLinkSetupReqFrame(tpAniSirGlobal pMac,
                             TID_AC_BK,
                             limTxComplete, pFrame,
                             limMgmtTXComplete,
-                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME );
+                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME,
+                            pMac->lim.txBdToken++);
 
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
         pMac->lim.mgmtFrameSessionId = 0xff;
-        limLog( pMac, LOGE, FL("could not send TDLS Dis Request frame!" ));
+        limLog(pMac, LOGE, FL("could not send TDLS Setup Request frame!"));
         return eSIR_FAILURE;
     }
     pMac->lim.mgmtFrameSessionId = psessionEntry->peSessionId;
@@ -1571,34 +1638,29 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
 
     PopulateDot11fLinkIden( pMac, psessionEntry, &teardown.LinkIdentifier,
                                                 peerMac, (responder == TRUE) ? TDLS_RESPONDER : TDLS_INITIATOR) ;
-
-
     /*
      * now we pack it.  First, how much space are we going to need?
      */
     status = dot11fGetPackedTDLSTeardownSize( pMac, &teardown, &nPayload);
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
-                               "or a discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGE,
+               FL("Failed to calculate the packed size for Teardown frame (0x%08x)."),
+               status);
         /* We'll fall back on the worst case scenario: */
         nPayload = sizeof( tDot11fProbeRequest );
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while calculating "
-                               "the packed size for a discovery Request ("
-                               "0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while calculating the packed size for Teardown frame (0x%08x)."),
+               status);
     }
-
-
     /*
      * This frame is going out from PE as data frames with special ethertype
      * 89-0d.
      * 8 bytes of RFC 1042 header
      */
-
-
     nBytes = nPayload + ((IS_QOS_ENABLED(psessionEntry))
                               ? sizeof(tSirMacDataHdr3a) : sizeof(tSirMacMgmtHdr))
                       + sizeof( eth_890d_header )
@@ -1629,8 +1691,9 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
                              ( void** ) &pPacket );
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
-        limLog( pMac, LOGP, FL("Failed to allocate %d bytes for a TDLS"
-                               "Discovery Request."), nBytes );
+        limLog(pMac, LOGE,
+               FL("Failed to allocate %d bytes for a TDLS Teardown Frame."),
+               nBytes);
         return eSIR_MEM_ALLOC_FAILED;
     }
 
@@ -1641,7 +1704,7 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
      * IE formation, memory allocation is completed, Now form TDLS discovery
      * request frame
      */
-
+    limLog(pMac, LOGE, FL("Reason of TDLS Teardown: %d"), reason);
     /* fill out the buffer descriptor */
 
     header_offset = limPrepareTdlsFrameHeader(pMac, pFrame,
@@ -1657,15 +1720,15 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
     if ( DOT11F_FAILED( status ) )
     {
         limLog( pMac, LOGE, FL("Failed to pack a TDLS Teardown req (0x%08x)."),
-                status );
+                status);
         palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT,
                                    ( void* ) pFrame, ( void* ) pPacket );
         return eSIR_FAILURE;
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while packing TDLS "
-                               "Teardown Request (0x%08x)."), status );
+        limLog(pMac, LOGW, FL("There were warnings while packing TDLS Teardown frame (0x%08x)."),
+               status);
     }
 #if 0
     if(pMac->hal.pCBackFnTxComp == NULL)
@@ -1687,9 +1750,8 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
 
     if( addIeLen != 0 )
     {
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR, ("Copy Additional Ie Len = %d"),
-            addIeLen ));
-       vos_mem_copy( pFrame + header_offset + nPayload, addIe, addIeLen );
+        limLog(pMac, LOG1, FL("Copy Additional Ie Len = %d"), addIeLen);
+        vos_mem_copy( pFrame + header_offset + nPayload, addIe, addIeLen );
     }
 
 #ifndef NO_PAD_TDLS_MIN_8023_SIZE
@@ -1704,8 +1766,7 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
         padVendorSpecific[3] = 0xA0;
         padVendorSpecific[4] = 0xC6;
 
-        LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO, ("Padding Vendor Specific Ie Len = %d"),
-                padLen ));
+        limLog(pMac, LOG1, FL("Padding Vendor Specific Ie Len = %d"), padLen);
 
         /* padding zero if more than 5 bytes are required */
         if (padLen > MIN_VENDOR_SPECIFIC_IE_SIZE)
@@ -1713,9 +1774,12 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
                          padLen - MIN_VENDOR_SPECIFIC_IE_SIZE, 0);
     }
 #endif
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL, ("[TDLS] action %d (%s) -%s-> OTA"),
-         SIR_MAC_TDLS_TEARDOWN, limTraceTdlsActionString(SIR_MAC_TDLS_TEARDOWN),
-         (reason == eSIR_MAC_TDLS_TEARDOWN_PEER_UNREACHABLE) ? "AP": "DIRECT" ));
+    limLog(pMac, LOG1, FL("[TDLS] action %d (%s) -%s-> OTA peer="MAC_ADDRESS_STR),
+                       SIR_MAC_TDLS_TEARDOWN,
+                       limTraceTdlsActionString(SIR_MAC_TDLS_TEARDOWN),
+                       ((reason == eSIR_MAC_TDLS_TEARDOWN_PEER_UNREACHABLE) ?
+                       "AP": "DIRECT"),
+                       MAC_ADDR_ARRAY(peerMac));
 
     halstatus = halTxFrameWithTxComplete( pMac, pPacket, ( tANI_U16 ) nBytes,
                             HAL_TXRX_FRM_802_11_DATA,
@@ -1723,11 +1787,12 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
                             TID_AC_VI,
                             limTxComplete, pFrame,
                             limMgmtTXComplete,
-                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME );
+                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME,
+                            pMac->lim.txBdToken++);
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
         pMac->lim.mgmtFrameSessionId = 0xff;
-        limLog( pMac, LOGE, FL("could not send TDLS Dis Request frame!" ));
+        limLog(pMac, LOGE, FL("could not send TDLS Teardown frame"));
         return eSIR_FAILURE;
 
     }
@@ -1739,13 +1804,13 @@ tSirRetStatus limSendTdlsTeardownFrame(tpAniSirGlobal pMac,
 /*
  * Send Setup RSP frame on AP link.
  */
-static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac, 
-                    tSirMacAddr peerMac, tANI_U8 dialog, tpPESession psessionEntry, 
+static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
+                    tSirMacAddr peerMac, tANI_U8 dialog, tpPESession psessionEntry,
                     etdlsLinkSetupStatus setupStatus, tANI_U8 *addIe, tANI_U16 addIeLen )
 {
     tDot11fTDLSSetupRsp  tdlsSetupRsp ;
     tANI_U32            status = 0 ;
-    tANI_U16            caps = 0 ;            
+    tANI_U16            caps = 0 ;
     tANI_U32            nPayload = 0 ;
     tANI_U32            header_offset = 0 ;
     tANI_U32            nBytes = 0 ;
@@ -1753,13 +1818,14 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
     void               *pPacket;
     eHalStatus          halstatus;
     uint32             selfDot11Mode;
+    tpSirMacCapabilityInfo pCapInfo;
 //  Placeholder to support different channel bonding mode of TDLS than AP.
 //  Today, WNI_CFG_CHANNEL_BONDING_MODE will be overwritten when connecting to AP
 //  To support this feature, we need to introduce WNI_CFG_TDLS_CHANNEL_BONDING_MODE
 //  As of now, we hardcoded to max channel bonding of dot11Mode (i.e HT80 for 11ac/HT40 for 11n)
 //  uint32 tdlsChannelBondingMode;
 
-    /* 
+    /*
      * The scheme here is to fill out a 'tDot11fProbeRequest' structure
      * and then hand it off to 'dot11fPackProbeRequest' (for
      * serialization).  We start by zero-initializing the structure:
@@ -1782,26 +1848,42 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
          * Could not get Capabilities value
          * from CFG. Log error.
          */
-         limLog(pMac, LOGP,
-                   FL("could not retrieve Capabilities value"));
+         limLog(pMac, LOGE, FL("could not retrieve Capabilities value"));
     }
+
+    pCapInfo = (tpSirMacCapabilityInfo) &caps;
+    /* Export QoS capability */
+    pCapInfo->qos = 1;
+
     swapBitField16(caps, ( tANI_U16* )&tdlsSetupRsp.Capabilities );
 
-    /* ipopulate supported rate IE */
-    PopulateDot11fSuppRates( pMac, POPULATE_DOT11F_RATES_OPERATIONAL, 
-                                &tdlsSetupRsp.SuppRates, psessionEntry );
-   
-    /* Populate extended supported rates */
-    PopulateDot11fExtSuppRates( pMac, POPULATE_DOT11F_RATES_OPERATIONAL,
-                                &tdlsSetupRsp.ExtSuppRates, psessionEntry );
+    /* populate supported rate and ext supported rate IE */
+    PopulateDot11fRatesTdls(pMac, &tdlsSetupRsp.SuppRates,
+                                &tdlsSetupRsp.ExtSuppRates);
 
-    /* Populate extended supported rates */
+    /* Populate extended capability IE */
     PopulateDot11fTdlsExtCapability( pMac, &tdlsSetupRsp.ExtCap );
 
     if ( 1 == pMac->lim.gLimTDLSWmmMode )
     {
+        tANI_U32  val = 0;
+
         /* include WMM IE */
-        PopulateDot11fWMMInfoStation( pMac, &tdlsSetupRsp.WMMInfoStation );
+        tdlsSetupRsp.WMMInfoStation.version = SIR_MAC_OUI_VERSION_1;
+        tdlsSetupRsp.WMMInfoStation.acvo_uapsd =
+                     (pMac->lim.gLimTDLSUapsdMask & 0x01);
+        tdlsSetupRsp.WMMInfoStation.acvi_uapsd =
+                     ((pMac->lim.gLimTDLSUapsdMask & 0x02) >> 1);
+        tdlsSetupRsp.WMMInfoStation.acbk_uapsd =
+                     ((pMac->lim.gLimTDLSUapsdMask & 0x04) >> 2);
+        tdlsSetupRsp.WMMInfoStation.acbe_uapsd =
+                     ((pMac->lim.gLimTDLSUapsdMask & 0x08) >> 3);
+
+        if(wlan_cfgGetInt(pMac, WNI_CFG_MAX_SP_LENGTH, &val) != eSIR_SUCCESS)
+           limLog(pMac, LOGE, FL("could not retrieve Max SP Length \n"));
+
+        tdlsSetupRsp.WMMInfoStation.max_sp_length = (tANI_U8)val;
+        tdlsSetupRsp.WMMInfoStation.present = 1;
     }
     else
     {
@@ -1814,6 +1896,7 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
         /* Populate QOS info, needed for Peer U-APSD session */
         /* TODO: Now hardcoded, because PopulateDot11fQOSCapsStation() depends on AP's capability, and
          TDLS doesn't want to depend on AP's capability */
+        limLog(pMac, LOG1, FL("populate QOS IE in Setup Response frame"));
         tdlsSetupRsp.QOSCapsStation.present = 1;
         tdlsSetupRsp.QOSCapsStation.max_sp_length = 0;
         tdlsSetupRsp.QOSCapsStation.qack = 0;
@@ -1840,11 +1923,14 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
 
     tdlsSetupRsp.Status.status = setupStatus ;
 
-    if ( 1 == pMac->lim.gLimTDLSOffChannelEnabled &&
-         ( pMac->roam.configParam.bandCapability != eCSR_BAND_24))
+    if (TRUE == pMac->lim.EnableTdls2040BSSCoexIE)
     {
-        tdlsSetupRsp.HT2040BSSCoexistence.present = 1;
-        tdlsSetupRsp.HT2040BSSCoexistence.infoRequest = 1;
+        if ( 1 == pMac->lim.gLimTDLSOffChannelEnabled &&
+            ( pMac->roam.configParam.bandCapability != eCSR_BAND_24))
+        {
+            tdlsSetupRsp.HT2040BSSCoexistence.present = 1;
+            tdlsSetupRsp.HT2040BSSCoexistence.infoRequest = 1;
+        }
     }
     /* 
      * now we pack it.  First, how much space are we going to need?
@@ -1853,16 +1939,17 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
                                                      &nPayload);
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
-                               "or a discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGE,
+               FL("Failed to calculate the packed size for a Setup Response (0x%08x)."),
+               status);
         /* We'll fall back on the worst case scenario: */
         nPayload = sizeof( tDot11fProbeRequest );
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while calculating "
-                               "the packed size for a discovery Request ("
-                               "0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while calculating the packed size for Setup Response (0x%08x)."),
+               status);
     }
 
     /*
@@ -1885,8 +1972,9 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
                              ( void** ) &pPacket );
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
-        limLog( pMac, LOGP, FL("Failed to allocate %d bytes for a TDLS"
-                               "Discovery Request."), nBytes );
+        limLog(pMac, LOGE,
+               FL("Failed to allocate %d bytes for a TDLS Setup Response."),
+               nBytes);
         return eSIR_MEM_ALLOC_FAILED;
     }
 
@@ -1915,24 +2003,28 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
          MAC_ADDR_ARRAY(tdlsSetupRsp.LinkIdentifier.bssid));
     }
 #endif
-    limLog( pMac, LOGW, FL("%s: SupportedChnlWidth %x rxMCSMap %x rxMCSMap %x txSupDataRate %x"),
-            __func__, tdlsSetupRsp.VHTCaps.supportedChannelWidthSet, tdlsSetupRsp.VHTCaps.rxMCSMap,
-            tdlsSetupRsp.VHTCaps.txMCSMap, tdlsSetupRsp.VHTCaps.txSupDataRate );
+    limLog(pMac, LOG1,
+           FL("SupportedChnlWidth %x rxMCSMap %x rxMCSMap %x txSupDataRate %x"),
+           tdlsSetupRsp.VHTCaps.supportedChannelWidthSet,
+           tdlsSetupRsp.VHTCaps.rxMCSMap,
+           tdlsSetupRsp.VHTCaps.txMCSMap,
+           tdlsSetupRsp.VHTCaps.txSupDataRate);
     status = dot11fPackTDLSSetupRsp( pMac, &tdlsSetupRsp, pFrame 
                                + header_offset, nPayload, &nPayload );
 
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGE, FL("Failed to pack a TDLS discovery req "
-                               "(0x%08x)."), status );
+        limLog(pMac, LOGE, FL("Failed to pack a TDLS Setup Response (0x%08x)."),
+               status);
         palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT, 
                                    ( void* ) pFrame, ( void* ) pPacket );
         return eSIR_FAILURE;
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while packing TDLS "
-                               "Discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while packing TDLS Setup Response (0x%08x)."),
+               status);
     }
 
     //Copy the additional IE. 
@@ -1944,8 +2036,11 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
        vos_mem_copy( pFrame + header_offset + nPayload, addIe, addIeLen );
     }
 
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL, ("[TDLS] action %d (%s) -AP-> OTA"),
-         SIR_MAC_TDLS_SETUP_RSP, limTraceTdlsActionString(SIR_MAC_TDLS_SETUP_RSP) ));
+    limLog(pMac, LOG1,
+           FL("[TDLS] action %d (%s) -AP-> OTA peer="MAC_ADDRESS_STR),
+           SIR_MAC_TDLS_SETUP_RSP,
+           limTraceTdlsActionString(SIR_MAC_TDLS_SETUP_RSP),
+           MAC_ADDR_ARRAY(peerMac));
 
     halstatus = halTxFrameWithTxComplete( pMac, pPacket, ( tANI_U16 ) nBytes,
                             HAL_TXRX_FRM_802_11_DATA,
@@ -1954,11 +2049,12 @@ static tSirRetStatus limSendTdlsSetupRspFrame(tpAniSirGlobal pMac,
                             TID_AC_BK,
                             limTxComplete, pFrame,
                             limMgmtTXComplete,
-                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME );
+                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME,
+                            pMac->lim.txBdToken++);
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
         pMac->lim.mgmtFrameSessionId = 0xff;
-        limLog( pMac, LOGE, FL("could not send TDLS Dis Request frame!" ));
+        limLog(pMac, LOGE, FL("could not send TDLS Setup Response"));
         return eSIR_FAILURE;
     }
     pMac->lim.mgmtFrameSessionId = psessionEntry->peSessionId;
@@ -2000,13 +2096,8 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
     tdlsSetupCnf.Action.action     = SIR_MAC_TDLS_SETUP_CNF ;
     tdlsSetupCnf.DialogToken.token = dialog ;
 
-#if 1
     PopulateDot11fLinkIden( pMac, psessionEntry, &tdlsSetupCnf.LinkIdentifier,
                       peerMac, TDLS_INITIATOR) ;
-#else
-    vos_mem_copy( (tANI_U8 *)&tdlsSetupCnf.LinkIdentifier,
-                  (tANI_U8 *)&setupRsp->LinkIdentifier, sizeof(tDot11fIELinkIdentifier)) ;
-#endif
 
     /* 
      * TODO: we need to see if we have to support conditions where we have
@@ -2018,6 +2109,7 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
     /* Check self and peer WMM capable */
     if ((1 == pMac->lim.gLimTDLSWmmMode) && (CHECK_BIT(peerCapability, TDLS_PEER_WMM_CAP)))
     {
+       limLog(pMac, LOG1, FL("populate WMM praram in Setup Confirm"));
        PopulateDot11fWMMParams(pMac, &tdlsSetupCnf.WMMParams, psessionEntry);
     }
 
@@ -2032,11 +2124,14 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
        PopulateDot11fHTInfo( pMac, &tdlsSetupCnf.HTInfo, psessionEntry );
     }
 
-    if ( 1 == pMac->lim.gLimTDLSOffChannelEnabled &&
-         ( pMac->roam.configParam.bandCapability != eCSR_BAND_24))
+    if (TRUE == pMac->lim.EnableTdls2040BSSCoexIE)
     {
-        tdlsSetupCnf.HT2040BSSCoexistence.present = 1;
-        tdlsSetupCnf.HT2040BSSCoexistence.infoRequest = 1;
+        if ( 1 == pMac->lim.gLimTDLSOffChannelEnabled &&
+            ( pMac->roam.configParam.bandCapability != eCSR_BAND_24))
+        {
+            tdlsSetupCnf.HT2040BSSCoexistence.present = 1;
+            tdlsSetupCnf.HT2040BSSCoexistence.infoRequest = 1;
+        }
     }
 
     /* 
@@ -2046,16 +2141,17 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
                                                      &nPayload);
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
-                               "or a discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGE,
+               FL("Failed to calculate the packed size for Setup Confirm (0x%08x)."),
+               status);
         /* We'll fall back on the worst case scenario: */
         nPayload = sizeof( tDot11fProbeRequest );
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while calculating "
-                               "the packed size for a discovery Request ("
-                               "0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while calculating the packed size for Setup Confirm (0x%08x)."),
+               status);
     }
 
     /*
@@ -2096,8 +2192,9 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
                              ( void** ) &pPacket );
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
-        limLog( pMac, LOGP, FL("Failed to allocate %d bytes for a TDLS"
-                               "Discovery Request."), nBytes );
+        limLog(pMac, LOGE,
+               FL("Failed to allocate %d bytes for a TDLS Setup Confirm."),
+               nBytes);
         return eSIR_MEM_ALLOC_FAILED;
     }
 
@@ -2127,16 +2224,18 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
 
     if ( DOT11F_FAILED( status ) )
     {
-        limLog( pMac, LOGE, FL("Failed to pack a TDLS discovery req "
-                               "(0x%08x)."), status );
+        limLog(pMac, LOGE,
+               FL("Failed to pack a TDLS Setup Confirm (0x%08x)."),
+               status);
         palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT, 
                                    ( void* ) pFrame, ( void* ) pPacket );
         return eSIR_FAILURE;
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while packing TDLS "
-                               "Discovery Request (0x%08x)."), status );
+        limLog(pMac, LOGW,
+               FL("There were warnings while packing TDLS Setup Confirm (0x%08x)."),
+               status);
     }
 #if 0
     if(pMac->hal.pCBackFnTxComp == NULL) 
@@ -2176,8 +2275,7 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
         padVendorSpecific[3] = 0xA0;
         padVendorSpecific[4] = 0xC6;
 
-        LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO, ("Padding Vendor Specific Ie Len = %d"),
-                padLen ));
+        limLog(pMac, LOG1, FL("Padding Vendor Specific Ie Len = %d"), padLen);
 
         /* padding zero if more than 5 bytes are required */
         if (padLen > MIN_VENDOR_SPECIFIC_IE_SIZE)
@@ -2187,8 +2285,11 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
 #endif
 
 
-    LIM_LOG_TDLS(VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL, ("[TDLS] action %d (%s) -AP-> OTA"),
-         SIR_MAC_TDLS_SETUP_CNF, limTraceTdlsActionString(SIR_MAC_TDLS_SETUP_CNF) ));
+    limLog(pMac, LOG1,
+           FL("[TDLS] action %d (%s) -AP-> OTA peer="MAC_ADDRESS_STR),
+           SIR_MAC_TDLS_SETUP_CNF,
+           limTraceTdlsActionString(SIR_MAC_TDLS_SETUP_CNF),
+           MAC_ADDR_ARRAY(peerMac));
 
     halstatus = halTxFrameWithTxComplete( pMac, pPacket, ( tANI_U16 ) nBytes,
                             HAL_TXRX_FRM_802_11_DATA,
@@ -2196,13 +2297,14 @@ tSirRetStatus limSendTdlsLinkSetupCnfFrame(tpAniSirGlobal pMac, tSirMacAddr peer
                             TID_AC_VI,
                             limTxComplete, pFrame, 
                             limMgmtTXComplete,
-                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME );
+                            HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME,
+                            pMac->lim.txBdToken++);
 
 
     if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
     {
         pMac->lim.mgmtFrameSessionId = 0xff;
-        limLog( pMac, LOGE, FL("could not send TDLS Dis Request frame!" ));
+        limLog(pMac, LOGE, FL("could not send TDLS Setup Confirm frame"));
         return eSIR_FAILURE;
 
     }
@@ -2437,9 +2539,14 @@ static tSirRetStatus limTdlsPopulateDot11fHTCaps(tpAniSirGlobal pMac, tpPESessio
        pDot11f->shortGI40MHz = 0;
     }
 
-    dot11fLog(pMac, LOG2, FL("SupportedChnlWidth: %d, mimoPS: %d, GF: %d, shortGI20:%d, shortGI40: %d, dsssCck: %d"),
-                                            pDot11f->supportedChannelWidthSet, pDot11f->mimoPowerSave,  pDot11f->greenField,
-                                            pDot11f->shortGI20MHz, pDot11f->shortGI40MHz, pDot11f->dsssCckMode40MHz);
+    limLog(pMac, LOG1,
+           FL("SupportedChnlWidth: %d, mimoPS: %d, GF: %d, shortGI20:%d, shortGI40: %d, dsssCck: %d"),
+           pDot11f->supportedChannelWidthSet,
+           pDot11f->mimoPowerSave,
+           pDot11f->greenField,
+           pDot11f->shortGI20MHz,
+           pDot11f->shortGI40MHz,
+           pDot11f->dsssCckMode40MHz);
 
     nCfgValue = pTdlsAddStaReq->htCap.ampduParamsInfo;
 
@@ -2450,7 +2557,7 @@ static tSirRetStatus limTdlsPopulateDot11fHTCaps(tpAniSirGlobal pMac, tpPESessio
     pDot11f->mpduDensity      = pHTParametersInfo->mpduDensity;
     pDot11f->reserved1        = pHTParametersInfo->reserved;
 
-    dot11fLog( pMac, LOG2, FL( "AMPDU Param: %x" ), nCfgValue);
+    limLog(pMac, LOG1, FL("AMPDU Param: %x"), nCfgValue);
 
     vos_mem_copy( pDot11f->supportedMCSSet, pTdlsAddStaReq->htCap.suppMcsSet,
                   SIZE_OF_SUPPORTED_MCS_SET);
@@ -2592,7 +2699,7 @@ limTdlsPopulateMatchingRateSet(tpAniSirGlobal pMac,
                                           &val) != eSIR_SUCCESS)
     {
         /// Could not get rateset from CFG. Log error.
-        limLog(pMac, LOGP, FL("could not retrieve rateset"));
+        limLog(pMac, LOGE, FL("could not retrieve rateset"));
         val = 0;
     }
     tempRateSet.numRates = val;
@@ -2610,7 +2717,7 @@ limTdlsPopulateMatchingRateSet(tpAniSirGlobal pMac,
 
     if ((tempRateSet.numRates + tempRateSet2.numRates) > 12)
     {
-        PELOGE(limLog(pMac, LOGE, FL("more than 12 rates in CFG"));)
+        limLog(pMac, LOGE, FL("more than 12 rates in CFG"));
         goto error;
     }
 
@@ -2655,9 +2762,9 @@ limTdlsPopulateMatchingRateSet(tpAniSirGlobal pMac,
      */
     if (supporteRatesLength > SIR_MAC_RATESET_EID_MAX)
     {
-       limLog( pMac, LOGW, FL("Supported rates length %d more than "
-                              "the Max limit, reset to Max"),
-                               supporteRatesLength);
+       limLog(pMac, LOGW,
+              FL("Supported rates length %d more than the Max limit, reset to Max"),
+              supporteRatesLength);
        supporteRatesLength = SIR_MAC_RATESET_EID_MAX;
     }
     for (i = 0; i < supporteRatesLength; i++)
@@ -2679,14 +2786,14 @@ limTdlsPopulateMatchingRateSet(tpAniSirGlobal pMac,
                 if ((tempRateSet2.rate[i] & 0x7F) ==
                     (tempRateSet.rate[j] & 0x7F))
                 {
-#ifdef FEATURE_WLAN_NON_INTEGRATED_SOC
-                    if ((bRateIndex > HAL_NUM_11B_RATES) || (aRateIndex > HAL_NUM_11A_RATES))
+                    if ((bRateIndex >= SIR_NUM_11B_RATES) ||
+                        (aRateIndex >= SIR_NUM_11A_RATES))
                     {
-                        limLog(pMac, LOGE, FL("Invalid number of rates (11b->%d, 11a->%d)"),
-                               bRateIndex, aRateIndex);
+                        limLog(pMac, LOGE, FL("Invalid number of rates"
+                                              "(11b->%d, 11a->%d)"),
+                                              bRateIndex,aRateIndex);
                         return eSIR_FAILURE;
                     }
-#endif
                     if (sirIsArate(tempRateSet2.rate[i] & 0x7f))
                     {
                         isArate=1;
@@ -2722,10 +2829,12 @@ limTdlsPopulateMatchingRateSet(tpAniSirGlobal pMac,
         for (i=0; i<val; i++)
             pStaDs->supportedRates.supportedMCSSet[i] = mcsSet[i] & pSupportedMCSSet[i];
 
-        PELOG2(limLog(pMac, LOG2, FL("limPopulateMatchingRateSet: MCS Rate Set Bitmap from CFG and DPH :"));)
+        limLog(pMac, LOG1, FL("MCS Rate Set Bitmap from CFG and DPH:"));
         for (i=0; i<SIR_MAC_MAX_SUPPORTED_MCS_SET; i++)
         {
-            PELOG2(limLog(pMac, LOG2,FL("%x %x "), mcsSet[i], pStaDs->supportedRates.supportedMCSSet[i]);)
+            limLog(pMac, LOG1, FL("%x %x"),
+                               mcsSet[i],
+                               pStaDs->supportedRates.supportedMCSSet[i]);
         }
     }
 
@@ -2832,7 +2941,12 @@ static void limTdlsUpdateHashNodeInfo(tpAniSirGlobal pMac, tDphHashNode *pStaDs,
     {
         pStaDs->mlmStaContext.htCapability = 1 ;
         pStaDs->htGreenfield = htCaps->greenField ;
-        pStaDs->htSupportedChannelWidthSet =  htCaps->supportedChannelWidthSet ;
+        /* pStaDs->htSupportedChannelWidthSet should have the base channel
+         * capability. The htSupportedChannelWidthSet of the TDLS link on
+         * base channel should be less than or equal to channel width of
+         * STA-AP link. So take this setting from the psessionEntry.
+         */
+        pStaDs->htSupportedChannelWidthSet = psessionEntry->htSupportedChannelWidthSet ;
         pStaDs->htMIMOPSState =             htCaps->mimoPowerSave ;
         pStaDs->htMaxAmsduLength =  htCaps->maximalAMSDUsize;
         pStaDs->htAMpduDensity =    htCaps->mpduDensity;
@@ -2858,11 +2972,21 @@ static void limTdlsUpdateHashNodeInfo(tpAniSirGlobal pMac, tDphHashNode *pStaDs,
     {
         pStaDs->mlmStaContext.vhtCapability = 1 ;
 
-        if ((psessionEntry->currentOperChannel <= SIR_11B_CHANNEL_END) &&
-            pMac->roam.configParam.enableVhtFor24GHz)
+        if (psessionEntry->currentOperChannel <= SIR_11B_CHANNEL_END)
         {
+            /* if the channel is 2G then update the min channel widthset in
+             * pStaDs. These values are used when sending a AddSta request to
+             * firmware
+             * 11.21.1 General: The channel width of the TDLS direct link on the
+             * base channel shall not exceed the channel width of the BSS to which
+             * the TDLS peer STAs are associated.*/
             pStaDs->vhtSupportedChannelWidthSet = WNI_CFG_VHT_CHANNEL_WIDTH_20_40MHZ;
             pStaDs->htSupportedChannelWidthSet = eHT_CHANNEL_WIDTH_20MHZ;
+            limLog(pMac, LOG1,
+                    FL("vhtSupportedChannelWidthSet = %hu,"
+                        " htSupportedChannelWidthSet %hu"),
+                    pStaDs->vhtSupportedChannelWidthSet,
+                    pStaDs->htSupportedChannelWidthSet) ;
         }
         else
         {
@@ -3104,9 +3228,9 @@ static tSirRetStatus limProcessTdlsDisReqFrame(tpAniSirGlobal pMac,
     }
     else if ( DOT11F_WARNED( status ) )
     {
-        limLog( pMac, LOGW, FL("There were warnings while unpacking a TDLS "
+        limLog(pMac, LOGW, FL("There were warnings while unpacking a TDLS "
                                "discovery Request frame (0x%08x, %d bytes):"),
-                   status, frmLen );
+                   status, frmLen);
         PELOG2(sirDumpBuf(pMac, SIR_DBG_MODULE_ID, LOG2, pBody, frmLen);)
     }
 
@@ -3139,7 +3263,7 @@ static tSirRetStatus limProcessTdlsDisReqFrame(tpAniSirGlobal pMac,
              MAC_ADDR_ARRAY(tdlsDisReq.LinkIdentifier.bssid));
     if(!status)
     {
-        limLog( pMac, LOGE, FL("TDLS discovery request frame from other BSS -> something wrong. Check RXP filter")) ;
+        limLog(pMac, LOGE, FL("TDLS discovery request frame from other BSS -> something wrong. Check RXP filter")) ;
 
         return eSIR_FAILURE ; 
     }
@@ -3429,7 +3553,6 @@ static tSirRetStatus limProcessTdlsSetupReqFrame(tpAniSirGlobal pMac,
             
                 break ;
             }
-#if 1
             case TDLS_LINK_SETUP_DONE_STATE:
             {
                 tpDphHashNode pStaDs = NULL ;
@@ -3480,7 +3603,6 @@ static tSirRetStatus limProcessTdlsSetupReqFrame(tpAniSirGlobal pMac,
                         ("link Setup is Recieved in unknown state" )) ;
                 break ;
             }
-#endif
         }
         if(tdlsStateStatus == TDLS_LINK_SETUP_START_STATE) 
             return eSIR_FAILURE ;
@@ -4268,18 +4390,16 @@ static tSirRetStatus limTdlsSetupAddSta(tpAniSirGlobal pMac,
 
         if( !aid )
         {
-            VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR,
-              ("%s: No more free AID for peer " MAC_ADDRESS_STR),
-                __func__, MAC_ADDR_ARRAY(pAddStaReq->peerMac)) ;
+            limLog(pMac, LOGE, FL("No more free AID for peer " MAC_ADDRESS_STR),
+                               MAC_ADDR_ARRAY(pAddStaReq->peerMac));
             return eSIR_FAILURE;
         }
 
         /* Set the aid in peerAIDBitmap as it has been assigned to TDLS peer */
         SET_PEER_AID_BITMAP(psessionEntry->peerAIDBitmap, aid);
 
-        VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL,
-              ("limTdlsSetupAddSta: Aid = %d, for peer =" MAC_ADDRESS_STR),
-                aid, MAC_ADDR_ARRAY(pAddStaReq->peerMac));
+        limLog(pMac, LOG1, FL("Aid = %d, for peer =" MAC_ADDRESS_STR),
+                           aid, MAC_ADDR_ARRAY(pAddStaReq->peerMac));
         pStaDs = dphGetHashEntry(pMac, aid, &psessionEntry->dph.dphHashTable);
 
         if (pStaDs)
@@ -4293,8 +4413,7 @@ static tSirRetStatus limTdlsSetupAddSta(tpAniSirGlobal pMac,
 
         if(NULL == pStaDs)
         {
-            VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR,
-                        (" add hash entry failed")) ;
+            limLog(pMac, LOGE, FL("add hash entry failed"));
             VOS_ASSERT(0) ;
             return eSIR_FAILURE;
         }
@@ -4330,15 +4449,13 @@ static tpDphHashNode limTdlsDelSta(tpAniSirGlobal pMac, tSirMacAddr peerMac,
     if(pStaDs)
     {
     
-        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO, 
-             ("DEL STA peer MAC: "MAC_ADDRESS_STR),
-                                  MAC_ADDR_ARRAY(pStaDs->staAddr));
-
-        VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL,
-                   ("limTdlsDelSta: STA type = %x, sta idx = %x"),pStaDs->staType,
-                                                           pStaDs->staIndex) ;
+        limLog(pMac, LOG1, FL("DEL STA peer MAC: "MAC_ADDRESS_STR),
+                           MAC_ADDR_ARRAY(pStaDs->staAddr));
+        limLog(pMac, LOG1, FL("STA type = %x, sta idx = %x"),
+                           pStaDs->staType,
+                           pStaDs->staIndex);
         limDeleteBASessions(pMac, psessionEntry, BA_BOTH_DIRECTIONS,
-                            eSIR_MAC_TDLS_TEARDOWN_UNSPEC_REASON);
+                            eSIR_MAC_PEER_TIMEDOUT_REASON);
         status = limDelSta(pMac, pStaDs, false, psessionEntry) ;
 #ifdef FEATURE_WLAN_TDLS_INTERNAL
         if(eSIR_SUCCESS == status)
@@ -4414,12 +4531,11 @@ static tSirRetStatus limTdlsLinkEstablish(tpAniSirGlobal pMac, tSirMacAddr peerM
     tdlsPtiTemplate.Category.category = SIR_MAC_ACTION_TDLS;
     tdlsPtiTemplate.Action.action     = SIR_MAC_TDLS_PEER_TRAFFIC_IND;
     tdlsPtiTemplate.DialogToken.token = 0 ; /* filled by firmware at the time of transmission */
-#if 1 
     /* CHECK_PTI_LINK_IDENTIFIER_INITIATOR_ADDRESS: initator address should be TDLS link setup's initiator address, 
     then below code makes such an way */
     PopulateDot11fLinkIden( pMac, psessionEntry, &tdlsPtiTemplate.LinkIdentifier,
         peerMac, !setupPeer->tdls_bIsResponder) ;
-#else
+#if 0
    /* below code will make PTI's linkIdentifier's initiator address be selfAddr */
     PopulateDot11fLinkIden( pMac, psessionEntry, &tdlsPtiTemplate.LinkIdentifier,
         peerMac, TDLS_INITIATOR) ;
@@ -4911,7 +5027,7 @@ static eHalStatus limSendSmeTdlsAddStaRsp(tpAniSirGlobal pMac,
     addStaRsp = vos_mem_malloc(sizeof(tSirTdlsAddStaRsp));
     if ( NULL == addStaRsp )
     {
-        PELOGE(limLog(pMac, LOGE, FL("Failed to allocate memory"));)
+        limLog(pMac, LOGE, FL("Failed to allocate memory"));
         return eSIR_FAILURE;
     }
 
@@ -4955,15 +5071,14 @@ eHalStatus limProcessTdlsAddStaRsp(tpAniSirGlobal pMac, void *msg,
     tANI_U16        aid = 0 ;
 
     SET_LIM_PROCESS_DEFD_MESGS(pMac, true);
-    VOS_TRACE(VOS_MODULE_ID_PE, TDLS_DEBUG_LOG_LEVEL,
-            ("limTdlsAddStaRsp: staIdx=%d, staMac="MAC_ADDRESS_STR), pAddStaParams->staIdx,
-                            MAC_ADDR_ARRAY(pAddStaParams->staMac));
+    limLog(pMac, LOG1, FL("staIdx=%d, staMac="MAC_ADDRESS_STR),
+                       pAddStaParams->staIdx,
+                       MAC_ADDR_ARRAY(pAddStaParams->staMac));
 
     if (pAddStaParams->status != eHAL_STATUS_SUCCESS)
     {
         VOS_ASSERT(0) ;
-        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR,
-                                                   ("Add sta failed ")) ;
+        limLog(pMac, LOGE, FL("Add sta failed "));
         status = eSIR_FAILURE;
         goto add_sta_error;
     }
@@ -4972,8 +5087,7 @@ eHalStatus limProcessTdlsAddStaRsp(tpAniSirGlobal pMac, void *msg,
                                          &psessionEntry->dph.dphHashTable);
     if(NULL == pStaDs)
     {
-        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR,
-                                                   ("pStaDs is NULL ")) ;
+        limLog(pMac, LOGE, FL("pStaDs is NULL "));
         status = eSIR_FAILURE;
         goto add_sta_error;
     }
@@ -5034,7 +5148,7 @@ void PopulateDot11fTdlsOffchannelParams(tpAniSirGlobal pMac,
 {
     tANI_U32   numChans = WNI_CFG_VALID_CHANNEL_LIST_LEN;
     tANI_U8    validChan[WNI_CFG_VALID_CHANNEL_LIST_LEN];
-    tANI_U8    i;
+    tANI_U8    i, j;
     tANI_U8    op_class;
     if (wlan_cfgGetStr(pMac, WNI_CFG_VALID_CHANNEL_LIST,
                           validChan, &numChans) != eSIR_SUCCESS)
@@ -5043,17 +5157,29 @@ void PopulateDot11fTdlsOffchannelParams(tpAniSirGlobal pMac,
          * Could not get Valid channel list from CFG.
          * Log error.
          */
-         limLog(pMac, LOGP,
-                FL("could not retrieve Valid channel list"));
+         limLog(pMac, LOGE, FL("could not retrieve valid channel list"));
+         return;
     }
     suppChannels->num_bands = (tANI_U8) numChans;
 
-    for ( i = 0U; i < suppChannels->num_bands; i++)
+    for ( i = 0U, j = 0U; i < suppChannels->num_bands &&
+                          j < LIM_MAX_BANDS; i++)
     {
-        suppChannels->bands[i][0] = validChan[i];
-        suppChannels->bands[i][1] = 1;
+        /* don't populate dfs channels in supported channels ie */
+        if (!(NV_CHANNEL_DFS == vos_nv_getChannelEnabledState(validChan[i]))) {
+            suppChannels->bands[j][0] = validChan[i];
+            suppChannels->bands[j][1] = 1;
+            /* store tdls self supported channels */
+            tdlsSelfSupportedChannels[j] = validChan[i];
+            j++;
+        }
     }
+    /* update the channel list with new length */
+    suppChannels->num_bands = j;
     suppChannels->present = 1 ;
+    /* store tdls self supported channels new length */
+    tdlsSelfNumChans = j;
+
     /*Get present operating class based on current operating channel*/
     op_class = limGetOPClassFromChannel(
                                      pMac->scan.countryCodeCurrent,
@@ -5061,14 +5187,19 @@ void PopulateDot11fTdlsOffchannelParams(tpAniSirGlobal pMac,
                                      psessionEntry->htSecondaryChannelOffset);
     if (op_class == 0)
     {
-        PELOGE(limLog(pMac, LOGE, FL("Present Operating class is Wrong!!!"));)
+        limLog(pMac, LOGE,
+               FL("Present Operating class is wrong, countryCodeCurrent: %s, currentOperChannel: %d, htSecondaryChannelOffset: %d"),
+               pMac->scan.countryCodeCurrent,
+               psessionEntry->currentOperChannel,
+               psessionEntry->htSecondaryChannelOffset);
     }
     else
     {
-        PELOGE(limLog(pMac, LOG1, FL("Present Operating channel=%d offset=%d class=%d"),
-                      psessionEntry->currentOperChannel,
-                      psessionEntry->htSecondaryChannelOffset,
-                      op_class);)
+        limLog(pMac, LOG1,
+               FL("Present Operating channel=%d offset=%d class=%d"),
+               psessionEntry->currentOperChannel,
+               psessionEntry->htSecondaryChannelOffset,
+               op_class);
     }
     suppOperClasses->present = 1;
     suppOperClasses->classes[0] = op_class;
@@ -5215,15 +5346,14 @@ tSirRetStatus limProcessSmeTdlsMgmtSendReq(tpAniSirGlobal pMac,
     tANI_U8      sessionId;
     tSirResultCodes resultCode = eSIR_SME_INVALID_PARAMETERS;
 
-    VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-            ("Send Mgmt Recieved")) ;
+    limLog(pMac, LOG1, FL("Send Mgmt Recieved"));
 
     if((psessionEntry = peFindSessionByBssid(pMac, pSendMgmtReq->bssid, &sessionId)) 
             == NULL)
     {
-        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR, 
-                "PE Session does not exist for given sme sessionId %d",
-                pSendMgmtReq->sessionId);
+        limLog(pMac, LOGE,
+               FL("PE Session does not exist for given sme sessionId %d"),
+               pSendMgmtReq->sessionId);
         goto lim_tdls_send_mgmt_error;
     }
 
@@ -5244,16 +5374,15 @@ tSirRetStatus limProcessSmeTdlsMgmtSendReq(tpAniSirGlobal pMac,
             (psessionEntry->limSmeState != eLIM_SME_LINK_EST_STATE))
     {
 
-        limLog(pMac, LOGE, "send mgmt received in invalid LIMsme "
-                "state (%d)", psessionEntry->limSmeState);
+        limLog(pMac, LOGE, FL("send mgmt received in invalid LIMsme state (%d)"),
+                           psessionEntry->limSmeState);
         goto lim_tdls_send_mgmt_error;
     }
 
     switch( pSendMgmtReq->reqType )
     {
         case SIR_MAC_TDLS_DIS_REQ:
-            VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-                    "Transmit Discovery Request Frame") ;
+            limLog(pMac, LOG1, FL("Transmit Discovery Request Frame"));
             /* format TDLS discovery request frame and transmit it */
             limSendTdlsDisReqFrame(pMac, pSendMgmtReq->peerMac, pSendMgmtReq->dialog, 
                     psessionEntry) ;
@@ -5261,6 +5390,7 @@ tSirRetStatus limProcessSmeTdlsMgmtSendReq(tpAniSirGlobal pMac,
             break;
         case SIR_MAC_TDLS_DIS_RSP:
             {
+                limLog(pMac, LOG1, FL("Transmit Discovery Response Frame"));
                 //Send a response mgmt action frame
                 limSendTdlsDisRspFrame(pMac, pSendMgmtReq->peerMac,
                         pSendMgmtReq->dialog, psessionEntry,
@@ -5271,6 +5401,7 @@ tSirRetStatus limProcessSmeTdlsMgmtSendReq(tpAniSirGlobal pMac,
             break;
         case SIR_MAC_TDLS_SETUP_REQ:
             {
+                limLog(pMac, LOG1, FL("Transmit Setup Request Frame"));
                 limSendTdlsLinkSetupReqFrame(pMac,
                         pSendMgmtReq->peerMac, pSendMgmtReq->dialog, psessionEntry,
                         &pSendMgmtReq->addIe[0], (pSendMgmtReq->length - sizeof(tSirTdlsSendMgmtReq))); 
@@ -5279,6 +5410,7 @@ tSirRetStatus limProcessSmeTdlsMgmtSendReq(tpAniSirGlobal pMac,
             break;
         case SIR_MAC_TDLS_SETUP_RSP:
             {
+                limLog(pMac, LOG1, FL("Transmit Setup Response Frame"));
                 limSendTdlsSetupRspFrame(pMac, 
                         pSendMgmtReq->peerMac, pSendMgmtReq->dialog, psessionEntry, pSendMgmtReq->statusCode,
                         &pSendMgmtReq->addIe[0], (pSendMgmtReq->length - sizeof(tSirTdlsSendMgmtReq)));
@@ -5287,6 +5419,7 @@ tSirRetStatus limProcessSmeTdlsMgmtSendReq(tpAniSirGlobal pMac,
             break;
         case SIR_MAC_TDLS_SETUP_CNF:
             {
+                limLog(pMac, LOG1, FL("Transmit Setup Confirm Frame"));
                 limSendTdlsLinkSetupCnfFrame(pMac, pSendMgmtReq->peerMac, pSendMgmtReq->dialog, pSendMgmtReq->peerCapability,
                         psessionEntry, &pSendMgmtReq->addIe[0], (pSendMgmtReq->length - sizeof(tSirTdlsSendMgmtReq)));  
                 resultCode = eSIR_SME_SUCCESS;
@@ -5294,6 +5427,7 @@ tSirRetStatus limProcessSmeTdlsMgmtSendReq(tpAniSirGlobal pMac,
             break;
         case SIR_MAC_TDLS_TEARDOWN:
             {
+                limLog(pMac, LOG1, FL("Transmit Teardown Frame"));
                 limSendTdlsTeardownFrame(pMac,
                         pSendMgmtReq->peerMac, pSendMgmtReq->statusCode, pSendMgmtReq->responder, psessionEntry,
                         &pSendMgmtReq->addIe[0], (pSendMgmtReq->length - sizeof(tSirTdlsSendMgmtReq))); 
@@ -5342,7 +5476,7 @@ void limSendSmeTdlsLinkEstablishReqRsp(tpAniSirGlobal pMac,
     pTdlsLinkEstablishReqRsp = vos_mem_malloc(sizeof(tSirTdlsLinkEstablishReqRsp));
     if ( NULL == pTdlsLinkEstablishReqRsp )
     {
-        PELOGE(limLog(pMac, LOGE, FL("Failed to allocate memory"));)
+        limLog(pMac, LOGE, FL("Failed to allocate memory"));
         return ;
     }
     pTdlsLinkEstablishReqRsp->statusCode = status ;
@@ -5405,7 +5539,7 @@ static eHalStatus limSendSmeTdlsDelStaRsp(tpAniSirGlobal pMac,
     pDelSta = vos_mem_malloc(sizeof(tSirTdlsDelStaRsp));
     if ( NULL == pDelSta )
     {
-        PELOGE(limLog(pMac, LOGE, FL("Failed to allocate memory"));)
+        limLog(pMac, LOGE, FL("Failed to allocate memory"));
             return eSIR_FAILURE;
     }
 
@@ -5445,15 +5579,14 @@ tSirRetStatus limProcessSmeTdlsAddStaReq(tpAniSirGlobal pMac,
     tpPESession psessionEntry;
     tANI_U8      sessionId;
 
-    VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-                                  ("Send Mgmt Recieved")) ;
+    limLog(pMac, LOG1, FL("TDLS Add STA Request Recieved"));
 
     if((psessionEntry = peFindSessionByBssid(pMac, pAddStaReq->bssid, &sessionId)) 
                                                                         == NULL)
     {
-         VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR, 
-                    "PE Session does not exist for given sme sessionId %d",
-                                                            pAddStaReq->sessionId);
+         limLog(pMac, LOGE,
+                FL("PE Session does not exist for given sme sessionId %d"),
+                pAddStaReq->sessionId);
          goto lim_tdls_add_sta_error;
     }
     
@@ -5474,8 +5607,9 @@ tSirRetStatus limProcessSmeTdlsAddStaReq(tpAniSirGlobal pMac,
                 (psessionEntry->limSmeState != eLIM_SME_LINK_EST_STATE))
      {
      
-         limLog(pMac, LOGE, "send mgmt received in invalid LIMsme "
-                "state (%d)", psessionEntry->limSmeState);
+         limLog(pMac, LOGE,
+                FL("Add STA received in invalid LIMsme state (%d)"),
+                psessionEntry->limSmeState);
          goto lim_tdls_add_sta_error;
      }
 
@@ -5484,7 +5618,7 @@ tSirRetStatus limProcessSmeTdlsAddStaReq(tpAniSirGlobal pMac,
      /* To start with, send add STA request to HAL */
      if (eSIR_FAILURE == limTdlsSetupAddSta(pMac, pAddStaReq, psessionEntry))
      {
-         limLog(pMac, LOGE, "%s: Add TDLS Station request failed ", __func__);
+         limLog(pMac, LOGE, FL("Add TDLS Station request failed"));
          goto lim_tdls_add_sta_error;
      }
      return eSIR_SUCCESS;
@@ -5507,15 +5641,14 @@ tSirRetStatus limProcessSmeTdlsDelStaReq(tpAniSirGlobal pMac,
     tANI_U8      sessionId;
     tpDphHashNode pStaDs = NULL ;
 
-    VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-            ("Send Mgmt Recieved")) ;
+    limLog(pMac, LOG1, FL("TDLS Delete STA Request Recieved"));
 
     if((psessionEntry = peFindSessionByBssid(pMac, pDelStaReq->bssid, &sessionId)) 
             == NULL)
     {
-        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR, 
-                "PE Session does not exist for given sme sessionId %d",
-                pDelStaReq->sessionId);
+        limLog(pMac, LOGE,
+               FL("PE Session does not exist for given sme sessionId %d"),
+               pDelStaReq->sessionId);
         limSendSmeTdlsDelStaRsp(pMac, pDelStaReq->sessionId, pDelStaReq->peerMac,
              NULL, eSIR_FAILURE) ;
         return eSIR_FAILURE;
@@ -5538,8 +5671,8 @@ tSirRetStatus limProcessSmeTdlsDelStaReq(tpAniSirGlobal pMac,
             (psessionEntry->limSmeState != eLIM_SME_LINK_EST_STATE))
     {
 
-        limLog(pMac, LOGE, "Del Sta received in invalid LIMsme state (%d)",
-               psessionEntry->limSmeState);
+        limLog(pMac, LOGE, FL("Del Sta received in invalid LIMsme state (%d)"),
+                           psessionEntry->limSmeState);
         goto lim_tdls_del_sta_error;
     }
 
@@ -5615,15 +5748,14 @@ tSirRetStatus limProcesSmeTdlsLinkEstablishReq(tpAniSirGlobal pMac,
     tANI_U16 peerIdx = 0 ;
     tpDphHashNode pStaDs = NULL ;
 
-    VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-            ("Send Mgmt Recieved")) ;
+    limLog(pMac, LOG1, FL("Link Establish Request Recieved")) ;
 
     if((psessionEntry = peFindSessionByBssid(pMac, pTdlsLinkEstablishReq->bssid, &sessionId))
             == NULL)
     {
-        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_ERROR,
-                "PE Session does not exist for given sme sessionId %d",
-                pTdlsLinkEstablishReq->sessionId);
+        limLog(pMac, LOGE,
+               FL("PE Session does not exist for given sme sessionId %d"),
+               pTdlsLinkEstablishReq->sessionId);
         limSendSmeTdlsLinkEstablishReqRsp(pMac, pTdlsLinkEstablishReq->sessionId, pTdlsLinkEstablishReq->peerMac,
              NULL, eSIR_FAILURE) ;
         return eSIR_FAILURE;
@@ -5646,8 +5778,9 @@ tSirRetStatus limProcesSmeTdlsLinkEstablishReq(tpAniSirGlobal pMac,
             (psessionEntry->limSmeState != eLIM_SME_LINK_EST_STATE))
     {
 
-        limLog(pMac, LOGE, "TDLS Link Establish Request received in "
-               "invalid LIMsme state (%d)", psessionEntry->limSmeState);
+        limLog(pMac, LOGE,
+               FL("TDLS Link Establish Request received in invalid LIMsme state (%d)"),
+               psessionEntry->limSmeState);
         goto lim_tdls_link_establish_error;
     }
     /*TODO Sunil , TDLSPeer Entry has the STA ID , Use it */
@@ -5655,15 +5788,15 @@ tSirRetStatus limProcesSmeTdlsLinkEstablishReq(tpAniSirGlobal pMac,
                                 &psessionEntry->dph.dphHashTable) ;
     if ( NULL == pStaDs )
     {
-        limLog( pMac, LOGE, FL( "pStaDs is NULL" ));
+        limLog(pMac, LOGE, FL( "pStaDs is NULL"));
         goto lim_tdls_link_establish_error;
 
     }
     pMsgTdlsLinkEstablishReq = vos_mem_malloc(sizeof( tTdlsLinkEstablishParams ));
     if ( NULL == pMsgTdlsLinkEstablishReq )
     {
-        limLog( pMac, LOGE,
-                     FL( "Unable to allocate memory TDLS Link Establish Request" ));
+        limLog(pMac, LOGE,
+               FL("Unable to allocate memory TDLS Link Establish Request"));
         return eSIR_MEM_ALLOC_FAILED;
     }
 
@@ -5674,37 +5807,37 @@ tSirRetStatus limProcesSmeTdlsLinkEstablishReq(tpAniSirGlobal pMac,
     pMsgTdlsLinkEstablishReq->uapsdQueues = pTdlsLinkEstablishReq->uapsdQueues;
     pMsgTdlsLinkEstablishReq->maxSp = pTdlsLinkEstablishReq->maxSp;
     pMsgTdlsLinkEstablishReq->isBufsta = pTdlsLinkEstablishReq->isBufSta;
-    pMsgTdlsLinkEstablishReq->isOffChannelSupported =
-                                pTdlsLinkEstablishReq->isOffChannelSupported;
+
     if (psessionEntry->tdlsChanSwitProhibited)
     {
-        pMsgTdlsLinkEstablishReq->isOffChannelSupported = 3;
+        /* If channel switch is prohibited by AP then dut can either
+         * send a switch channel request with failure status or it can
+         * ignore the request without sending the response.
+         * isOffChannelSupported = 0 disables the TDLS off-channel and
+         * if off-channel support is disabled then FW ignores switch
+         * channel request sent by TDLS peer */
+        pMsgTdlsLinkEstablishReq->isOffChannelSupported = 0;
         limLog(pMac, LOG1, FL("Channel Switch Prohibited by AP"));
     }
     else
     {
-        pMsgTdlsLinkEstablishReq->isOffChannelSupported = 1;
+        pMsgTdlsLinkEstablishReq->isOffChannelSupported =
+            pTdlsLinkEstablishReq->isOffChannelSupported;
     }
+
     if ((pTdlsLinkEstablishReq->supportedChannelsLen > 0) &&
         (pTdlsLinkEstablishReq->supportedChannelsLen <= SIR_MAC_MAX_SUPP_CHANNELS))
     {
-        tANI_U32   selfNumChans = WNI_CFG_VALID_CHANNEL_LIST_LEN;
-        tANI_U8    selfSupportedChannels[WNI_CFG_VALID_CHANNEL_LIST_LEN];
-        if (wlan_cfgGetStr(pMac, WNI_CFG_VALID_CHANNEL_LIST,
-                          selfSupportedChannels, &selfNumChans) != eSIR_SUCCESS)
+        /* check self supported channels and pass them to FW */
+        if ((tdlsSelfNumChans > 0) &&
+            (tdlsSelfNumChans < LIM_TDLS_MAX_NON_DFS_CHANNELS))
         {
-            /**
-             * Could not get Valid channel list from CFG.
-             * Log error.
-             */
-             limLog(pMac, LOGP,
-                    FL("could not retrieve Valid channel list"));
-        }
-        limTdlsGetIntersection(selfSupportedChannels, selfNumChans,
+            limTdlsGetIntersection(tdlsSelfSupportedChannels, tdlsSelfNumChans,
                                pTdlsLinkEstablishReq->supportedChannels,
                                pTdlsLinkEstablishReq->supportedChannelsLen,
                                pMsgTdlsLinkEstablishReq->validChannels,
                                &pMsgTdlsLinkEstablishReq->validChannelsLen);
+        }
     }
     vos_mem_copy(pMsgTdlsLinkEstablishReq->validOperClasses,
                         pTdlsLinkEstablishReq->supportedOperClasses, pTdlsLinkEstablishReq->supportedOperClassesLen);
@@ -5737,7 +5870,7 @@ tSirRetStatus limDeleteTDLSPeers(tpAniSirGlobal pMac, tpPESession psessionEntry)
 
     if (NULL == psessionEntry)
     {
-        PELOGE(limLog(pMac, LOGE, FL("NULL psessionEntry"));)
+        limLog(pMac, LOGE, FL("NULL psessionEntry"));
         return eSIR_FAILURE;
     }
 
@@ -5753,8 +5886,8 @@ tSirRetStatus limDeleteTDLSPeers(tpAniSirGlobal pMac, tpPESession psessionEntry)
 
                 if (NULL != pStaDs)
                 {
-                    PELOGE(limLog(pMac, LOGE, FL("Deleting "MAC_ADDRESS_STR),
-                           MAC_ADDR_ARRAY(pStaDs->staAddr)););
+                    limLog(pMac, LOGE, FL("Deleting "MAC_ADDRESS_STR),
+                                       MAC_ADDR_ARRAY(pStaDs->staAddr));
 
                     limSendDeauthMgmtFrame(pMac, eSIR_MAC_DEAUTH_LEAVING_BSS_REASON,
                                            pStaDs->staAddr, psessionEntry, FALSE);
@@ -5768,6 +5901,53 @@ tSirRetStatus limDeleteTDLSPeers(tpAniSirGlobal pMac, tpPESession psessionEntry)
     limSendSmeTDLSDeleteAllPeerInd(pMac, psessionEntry);
 
     return eSIR_SUCCESS;
+}
+
+
+tANI_U8 limGetOffChMaxBwOffsetFromChannel(tANI_U8 *country,
+                                          tANI_U8 channel,
+                                          tANI_U8 peerVHTCapability)
+{
+    op_class_map_t *class = NULL;
+    tANI_U16 i = 0;
+    offset_t offset = BW20, max_allowed = BW80;
+
+    if ((TRUE == peerVHTCapability) &&
+        IS_FEATURE_SUPPORTED_BY_FW(DOT11AC) &&
+        IS_FEATURE_SUPPORTED_BY_DRIVER(DOT11AC))
+        max_allowed = BW80;
+    else
+        max_allowed = BW40MINUS;
+
+    if (VOS_TRUE == vos_mem_compare(country,"US", 2))  {
+
+        class = us_op_class;
+
+    } else if (VOS_TRUE == vos_mem_compare(country,"EU", 2)) {
+
+        class = euro_op_class;
+
+    } else if (VOS_TRUE == vos_mem_compare(country,"JP", 2)) {
+
+        class = japan_op_class;
+
+    } else {
+
+        class = global_op_class;
+
+    }
+
+    while (class->op_class)
+    {
+        for (i=0; (i < 25 && class->channels[i]); i++)
+        {
+            if (channel == class->channels[i] && class->offset <= max_allowed)
+                offset = class->offset;
+        }
+        class++;
+    }
+
+    return offset;
 }
 
 
@@ -5800,7 +5980,7 @@ tANI_U8 limGetOPClassFromChannel(tANI_U8 *country,
     {
         if ((offset == class->offset) || (offset == BWALL))
         {
-            for (i=0; (i < 15 && class->channels[i]); i++)
+            for (i=0; (i < 25 && class->channels[i]); i++)
             {
                 if (channel == class->channels[i])
                     return class->op_class;
@@ -6006,6 +6186,34 @@ tSirRetStatus limProcesSmeTdlsChanSwitchReq(tpAniSirGlobal pMac,
 
     vos_mem_set( (tANI_U8 *)pMsgTdlsChanSwitch, sizeof(tpTdlsChanSwitchParams), 0);
 
+    /* if channel bw offset is not set,
+       send maximum supported offset in the band */
+    if (pTdlsChanSwitch->tdlsOffChBwOffset == 0)
+    {
+        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
+                  ("Set TDLS channel Bw Offset"));
+
+        if ((pTdlsChanSwitch->tdlsOffCh >= 1) &&
+            (pTdlsChanSwitch->tdlsOffCh <= 14))
+        {
+            pTdlsChanSwitch->tdlsOffChBwOffset = BW20;
+        }
+        else if ((pTdlsChanSwitch->tdlsOffCh >= 36) &&
+                 (pTdlsChanSwitch->tdlsOffCh <= 169))
+        {
+            pTdlsChanSwitch->tdlsOffChBwOffset =
+                                limGetOffChMaxBwOffsetFromChannel(
+                                              pMac->scan.countryCodeCurrent,
+                                              pTdlsChanSwitch->tdlsOffCh,
+                                              pStaDs->mlmStaContext.vhtCapability);
+        }
+    }
+    else
+    {
+        /* Channel Bandwidth Offset is set through iwpriv ioctl */
+        (pTdlsChanSwitch->tdlsOffChBwOffset)--;
+    }
+
     pMsgTdlsChanSwitch->staIdx = pStaDs->staIndex;
     pMsgTdlsChanSwitch->tdlsOffCh = pTdlsChanSwitch->tdlsOffCh;
     pMsgTdlsChanSwitch->tdlsOffChBwOffset = pTdlsChanSwitch->tdlsOffChBwOffset;
@@ -6014,6 +6222,7 @@ tSirRetStatus limProcesSmeTdlsChanSwitchReq(tpAniSirGlobal pMac,
                                            pMac->scan.countryCodeCurrent,
                                            pTdlsChanSwitch->tdlsOffCh,
                                            pTdlsChanSwitch->tdlsOffChBwOffset);
+
     if(pMsgTdlsChanSwitch->operClass == 0)
     {
 
@@ -6026,13 +6235,16 @@ tSirRetStatus limProcesSmeTdlsChanSwitchReq(tpAniSirGlobal pMac,
     {
 
         VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-              "%s: TDLS Channel Switch params: staIdx %d class %d ch %d bw %d mode %d",
+              "%s: TDLS Channel Switch params: staIdx %d class %d ch %d bw %d"
+              " mode %d country code %c%c",
                __func__,
                pMsgTdlsChanSwitch->staIdx,
                pMsgTdlsChanSwitch->operClass,
                pMsgTdlsChanSwitch->tdlsOffCh,
                pMsgTdlsChanSwitch->tdlsOffChBwOffset,
-               pMsgTdlsChanSwitch->tdlsSwMode);
+               pMsgTdlsChanSwitch->tdlsSwMode,
+               pMac->scan.countryCodeCurrent[0],
+               pMac->scan.countryCodeCurrent[1]);
     }
 
     msg.type = WDA_SET_TDLS_CHAN_SWITCH_REQ;
@@ -6053,5 +6265,25 @@ lim_tdls_chan_switch_error:
                                    pTdlsChanSwitch->peerMac,
                                    NULL, eSIR_FAILURE);
     return eSIR_FAILURE;
+}
+
+/*
+ * Set 20_40 BSS Coex IE in TDLS frames.
+ */
+tSirRetStatus limProcessSmeSetTdls2040BSSCoexReq(tpAniSirGlobal pMac,
+                                                 tANI_U32 *pMsgBuf)
+{
+    tAniSetTdls2040BSSCoex *pmsg = NULL;
+    pmsg = (tAniSetTdls2040BSSCoex*) pMsgBuf ;
+
+    if (NULL != pmsg) {
+        pMac->lim.EnableTdls2040BSSCoexIE = pmsg->SetTdls2040BSSCoex;
+    }
+    VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
+              "%s: 20_40 BSS Coex IE in TDLS frames "
+              "pMac->lim.EnableTdls2040BSSCoexIE %d ", __func__,
+              pMac->lim.EnableTdls2040BSSCoexIE);
+
+    return eSIR_SUCCESS;
 }
 

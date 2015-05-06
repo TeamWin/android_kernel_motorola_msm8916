@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -35,8 +35,6 @@
   @brief 
                
    This file contains the external API exposed by the wlan data transfer abstraction layer module.
-   Copyright (c) 2008 QUALCOMM Incorporated. All Rights Reserved.
-   Qualcomm Confidential and Proprietary
 ========================================================================*/
 
 /*===========================================================================
@@ -424,54 +422,4 @@ void WLANDXE_ChannelDebug
    wpt_uint8      debugFlags
 );
 
-#ifdef WLANDXE_TEST_CHANNEL_ENABLE
-/*==========================================================================
-  @  Function Name 
-      WLANDXE_UnitTest
-
-  @  Description 
-      Temporary for the DXE module test
-
-  @  Parameters
-      NONE
-
-  @  Return
-      NONE
-
-===========================================================================*/
-void WLANDXE_UnitTestStartDXE
-(
-   void
-);
-
-/*==========================================================================
-  @  Function Name 
-
-  @  Description 
-
-  @  Parameters
-
-  @  Return
-
-===========================================================================*/
-void WLANDXE_UnitTestDataTransfer
-(
-   void
-);
-
-/*==========================================================================
-  @  Function Name 
-
-  @  Description 
-
-  @  Parameters
-
-  @  Return
-
-===========================================================================*/
-void WLANDXE_UnitTestEventHandle
-(
-   void     *dxeCB
-);
-#endif /* WLANDXE_TEST_CHANNEL_ENABLE */
 #endif /* WLAN_QCT_DXE_H */

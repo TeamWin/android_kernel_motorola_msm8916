@@ -9,8 +9,9 @@ WLAN_CHIPSET := prima
 WLAN_SELECT := CONFIG_PRIMA_WLAN=m
 endif
 
-# Build/Package options for 8916, 8974, 8226, 8610, 8909 targets
-ifneq (,$(filter msm8916 msm8974 msm8226 msm8610 msm8909,$(TARGET_BOARD_PLATFORM)))
+# Build/Package options for 8916, 8974, 8226, 8610, 8909, 8952 targets
+ifneq (,$(filter msm8916 msm8974 msm8226 msm8610 msm8909 msm8952,$(TARGET_BOARD_PLATFORM)))
+
 WLAN_CHIPSET := pronto
 WLAN_SELECT := CONFIG_PRONTO_WLAN=m
 endif
@@ -98,8 +99,8 @@ PATCHLEVEL=$(shell grep -w "PATCHLEVEL =" $(TOP)/kernel/Makefile | sed 's/^PATCH
 include $(CLEAR_VARS)
 LOCAL_MODULE              := $(WLAN_CHIPSET)_wlan.ko
 LOCAL_MODULE_KBUILD_NAME  := wlan.ko
-LOCAL_MODULE_TAGS         := optional
-LOCAL_MODULE_DEBUG_ENABLE := false
+LOCAL_MODULE_TAGS         := debug
+LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(TARGET_OUT)/lib/modules/$(WLAN_CHIPSET)
 include $(DLKM_DIR)/AndroidKernelModule.mk
 ###########################################################

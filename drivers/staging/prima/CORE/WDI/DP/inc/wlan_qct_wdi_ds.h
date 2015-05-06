@@ -39,8 +39,6 @@
  *  This file contains the external API exposed by the 
  *   wlan device abstarction layer module.
  *
- *   Copyright (c) 2008 QUALCOMM Incorporated. All Rights Reserved.
- *   Qualcomm Confidential and Proprietary
  */
 
 
@@ -70,6 +68,7 @@ typedef struct
    wpt_uint16 fPktlen;
    wpt_status txCompleteStatus;
    wpt_uint8  staIdx;
+   wpt_uint32  txBdToken;
 } WDI_DS_TxMetaInfoType;
 
 
@@ -87,6 +86,20 @@ typedef enum
   WDI_DS_OPCODE_DROPCUR         = 9,
   WDI_DS_OPCODE_MAX
 }WDI_DS_BAOpCodeEnumType;
+
+#define WDI_DS_LOG_PKT_TYPE_LEN 4
+typedef enum
+{
+  WDI_DS_PACKET_LOG = 1<<0,
+
+  // Insert new values before this
+
+  // If the value of WDI_DS_MAX LOG is increased please
+  // make sure to change the data type of
+  // WDI_DS_RxMetaInfoType.loggingData from wpt_uint8
+  // to accommodate more values
+  WDI_DS_MAX_LOG    = 1<<31
+}WDI_DS_LoggingDataEnumType;
 
 typedef struct 
 {
@@ -159,6 +172,7 @@ typedef struct
 #ifdef WLAN_FEATURE_EXTSCAN
    wpt_uint32 extscanBuffer;
 #endif
+   wpt_uint32 loggingData;
 } WDI_DS_RxMetaInfoType;
 
 typedef struct sPktMetaInfo

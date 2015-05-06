@@ -43,9 +43,6 @@
   Are listed for each API below.
 
 
-  Copyright (c) 2010-2011 QUALCOMM Incorporated.
-  All Rights Reserved.
-  Qualcomm Confidential and Proprietary
 ===========================================================================*/
 
 /*===========================================================================
@@ -424,7 +421,8 @@ WDA_DS_BuildTxPacketInfo
   v_U32_t          txFlag,
   v_U32_t         timeStamp,
   v_U8_t          ucIsEapol,
-  v_U8_t          ucUP
+  v_U8_t          ucUP,
+  v_U32_t         ucTxBdToken
 )
 {
   VOS_STATUS             vosStatus;
@@ -469,7 +467,7 @@ WDA_DS_BuildTxPacketInfo
   pTxMetaInfo->fdisableFrmXlt = ucDisableFrmXtl;
   pTxMetaInfo->frmType     = ( ( typeSubtype & 0x30 ) >> 4 );
   pTxMetaInfo->typeSubtype = typeSubtype;
-
+  pTxMetaInfo->txBdToken = ucTxBdToken;
   /* Length = MAC header + payload */
   vos_pkt_get_packet_length( vosDataBuff, pusPktLen);
   pTxMetaInfo->fPktlen = *pusPktLen;
@@ -1211,3 +1209,40 @@ WDA_DS_TxCompleteCB
 
   wdaContext->pfnTxCompleteCallback( pvosGCtx, pFrameDataBuff, vosStatus );
 }
+
+/*==========================================================================
+   FUNCTION    WDA_DS_GetAvailableResCount
+
+  DESCRIPTION
+  It returns Available resource count for appropriate Pool Type
+
+  DEPENDENCIES
+
+  PARAMETERS
+
+   IN
+    pvosGCtx          vos context
+    wdiResPool       Pool Type
+
+  RETURN VALUE
+    Available resource count
+
+============================================================================*/
+uint32
+WDA_DS_GetAvailableResCount
+(
+  v_PVOID_t pvosGCtx,
+  WDI_ResPoolType wdiResPool
+)
+{
+  tWDA_CbContext *wdaContext = NULL;
+  wdaContext = (tWDA_CbContext *)vos_get_context(VOS_MODULE_ID_WDA, pvosGCtx);
+  if ( NULL == wdaContext )
+  {
+       VOS_TRACE( VOS_MODULE_ID_WDA, VOS_TRACE_LEVEL_ERROR,
+           "WDA:Invalid wda context pointer from pvosGCtx on WDA_DS_GetAvailableResCount" );
+       return 0;
+  }
+  return WDI_GetAvailableResCount(wdaContext->pWdiContext,wdiResPool);
+}
+

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -167,6 +167,8 @@ when        who    what, where, why
 #define WLANTL_MGMT_FRAME_TYPE       0x00
 #define WLANTL_CTRL_FRAME_TYPE       0x10
 #define WLANTL_DATA_FRAME_TYPE       0x20
+
+#define WLANTL_MGMT_PROBE_REQ_FRAME_TYPE    0x04
 
 /*Value of the data type field in the 802.11 frame */
 #define WLANTL_80211_DATA_TYPE         0x02
@@ -517,6 +519,12 @@ typedef struct
   /* Function pointer to the packet retrieval routine in HDD */
   WLANTL_STAFetchPktCBType      pfnSTAFetchPkt;
 
+  /* Function pointer holding ULA complete CB routine registered by HDD */
+  WLANTL_STAUlaCompleteCBType   pfnSTAUlaComplete;
+
+  /* HDD Context used in ULA complete CB routine  */
+  v_PVOID_t                     pUlaCBCtx;
+
   /* Reordering information for the STA */
   WLANTL_BAReorderType          atlBAReorderInfo[WLAN_MAX_TID];
 
@@ -576,7 +584,7 @@ typedef struct
   v_U8_t                        ucMPDUHeaderLen;
 
   /* Enabled ACs currently serviced by TL (automatic setup in TL)*/
-  v_U8_t                        aucACMask[WLANTL_MAX_AC];
+  v_U8_t                        aucACMask[WLANTL_NUM_TX_QUEUES];
 
   /* Current AC to be retrieved */
   WLANTL_ACEnumType             ucCurrentAC;
@@ -677,6 +685,10 @@ typedef struct
     1 then we have to encrypt the data irrespective of TL
     state (CONNECTED/AUTHENTICATED) */
   v_U8_t ptkInstalled;
+
+  /* Flag to check EAPOL 4/4 recevied by TL*/
+  v_U8_t isEapolM4Transmitted;
+  vos_lock_t ulaLock;
 
   v_U32_t       linkCapacity;
 
@@ -864,6 +876,8 @@ typedef struct
 
   /* Current served station ID in round-robin method to traverse all stations.*/
   WLANTL_ACEnumType uCurServedAC;
+
+  WLANTL_SpoofMacAddr   spoofMacAddr;
 
   /* How many weights have not been served in current AC. */
   v_U8_t ucCurLeftWeight;

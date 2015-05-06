@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -73,6 +73,14 @@ when           who        what, where, why
  * -------------------------------------------------------------------------*/
 #define WLANDXE_CTXT_COOKIE              0xC00CC111
 
+#define foreach_valid_channel(idx)                \
+    for (idx = 0; idx < WDTS_CHANNEL_MAX; idx++)  \
+        if (!(dxeGetEnabledChannels() & 1<<idx))  \
+            continue;                             \
+        else
+
+#define WLANDXE_IS_VALID_CHANNEL(idx) \
+    (dxeGetEnabledChannels() & 1<<idx)
 
 /* From here WCNSS DXE register information
  * This is temporary definition location to make compile and unit test
@@ -162,6 +170,8 @@ when           who        what, where, why
 #define WLANDXE_DMA_CSR_RESERVED_MASK         0xFFFF0000
 #define WLANDXE_DMA_CSR_RESERVED_OFFSET       0x10
 #define WLANDXE_DMA_CSR_RESERVED_DEFAULT      0x0
+
+#define WLANDXE_RX_INTERRUPT_HANDLE_MASK      0x80000
 
 #define WLANDXE_DMA_CSR_H2H_SYNC_EN_MASK      0x8000
 #define WLANDXE_DMA_CSR_H2H_SYNC_EN_OFFSET    0x0F
@@ -453,6 +463,7 @@ typedef enum {
 #define HDXE_MSG                     WPAL_TRACE
 #define HDXE_ASSERT(a)               VOS_ASSERT(a)
 
+#define WLANDXE_PRONTO_TX_WQ       0x6
 /*----------------------------------------------------------------------------
  *  Type Declarations
  * -------------------------------------------------------------------------*/
@@ -546,9 +557,6 @@ typedef struct
    WLANDXE_DescType                *linkedDesc;
    wpt_uint32                       linkedDescPhyAddr;
    wpt_uint32                       ctrlBlkOrder;
-#ifdef FEATURE_R33D
-   wpt_uint32                       shadowBufferVa;
-#endif /* FEATURE_R33D */
 } WLANDXE_DescCtrlBlkType;
 
 typedef struct
@@ -627,14 +635,13 @@ typedef struct
    WDTS_ChannelType                channelType;
    WLANDXE_DescCtrlBlkType        *headCtrlBlk;
    WLANDXE_DescCtrlBlkType        *tailCtrlBlk;
-#if !(defined(FEATURE_R33D) || defined(WLANDXE_TEST_CHANNEL_ENABLE))
    WLANDXE_DescType               *descriptorAllocation;
-#endif
    WLANDXE_DescType               *DescBottomLoc;
    wpt_uint32                      descBottomLocPhyAddr;
    wpt_uint32                      numDesc;
    wpt_uint32                      numFreeDesc;
    wpt_uint32                      numRsvdDesc;
+   wpt_uint32                      desc_write_fail_count;
    wpt_uint32                      maxFrameSize;
    wpt_uint32                      numFragmentCurrentChain;
    wpt_uint32                      numFrameBeforeInt;
@@ -647,8 +654,6 @@ typedef struct
    WLANDXE_ChannelExConfigType     extraConfig;
    WLANDXE_DMAChannelType          assignedDMAChannel;
    wpt_uint64                      rxDoneHistogram;
-   wpt_timer                       healthMonitorTimer;
-   wpt_msg                        *healthMonitorMsg;
 } WLANDXE_ChannelCBType;
 
 typedef struct
@@ -738,4 +743,13 @@ extern wpt_status dxeChannelDefaultConfig
    WLANDXE_ChannelCBType   *channelEntry
 );
 
+void dxeSetEnabledChannels
+(
+   wpt_uint8 enabledChannels
+);
+
+wpt_uint8 dxeGetEnabledChannels
+(
+   void
+);
 #endif /* WLAN_QCT_DXE_I_H */

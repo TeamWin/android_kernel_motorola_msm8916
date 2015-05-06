@@ -465,6 +465,17 @@ typedef enum
 
   WDI_SPOOF_MAC_ADDR_REQ                         = 101,
 
+  WDI_GET_FW_STATS_REQ                           = 102,
+
+  /* Send command to encrypt the given message */
+  WDI_ENCRYPT_MSG_REQ                            = 103,
+
+  WDI_MGMT_LOGGING_INIT_REQ                      = 104,
+  WDI_GET_FRAME_LOG_REQ                          = 105,
+
+  /* NAN Request */
+  WDI_NAN_REQUEST                                = 106,
+
   WDI_MAX_REQ,
 
   /*Send a suspend Indication down to HAL*/
@@ -790,6 +801,16 @@ typedef enum
   WDI_EXTSCAN_RESET_SIGNF_RSSI_CHANGE_RSP        = 100,
 #endif
   WDI_SPOOF_MAC_ADDR_RSP                         = 101,
+  WDI_GET_FW_STATS_RSP                           = 102,
+
+  /* Send command to encrypt the given message */
+  WDI_ENCRYPT_MSG_RSP                            = 103,
+
+  WDI_MGMT_LOGGING_INIT_RSP                      = 104,
+  WDI_GET_FRAME_LOG_RSP                          = 105,
+
+  WDI_NAN_RESPONSE                               = 106,
+
   /*-------------------------------------------------------------------------
     Indications
      !! Keep these last in the enum if possible
@@ -868,6 +889,7 @@ typedef enum
 #endif
   WDI_TDLS_CHAN_SWITCH_REQ_RESP      = WDI_HAL_IND_MIN + 26,
   WDI_HAL_DEL_BA_IND                 = WDI_HAL_IND_MIN + 27,
+  WDI_HAL_NAN_EVENT                  = WDI_HAL_IND_MIN + 28,
   WDI_MAX_RESP
 }WDI_ResponseEnumType; 
 
@@ -1228,6 +1250,9 @@ typedef struct
 
   /* reason for WDI_DetectedDeviceError */
   void *                        DeviceErrorReason;
+
+   /* Roam delay statistic enabled in ini*/
+   wpt_uint8                  roamDelayStatsEnabled;
 }WDI_ControlBlockType; 
 
 
@@ -4988,7 +5013,7 @@ WDI_RXMsgCTSCB
  @see
  @return Result of the function call
 */
-WPT_INLINE WDI_Status   // Motorola IKJB42MAIN-4103, are002, match instantiation
+WDI_Status
 WDI_ProcessResponse
 (
   WDI_ControlBlockType*  pWDICtx,
@@ -5825,6 +5850,20 @@ WDI_ProcessBatchScanResultInd
 
 #endif /* FEATURE_WLAN_BATCH_SCAN */
 
+WDI_Status
+WDI_ProcessGetFwStatsReq
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+WDI_Status
+WDI_ProcessGetFwStatsRsp
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
 #ifdef FEATURE_WLAN_CH_AVOID
 /**
  @brief v -
@@ -6072,6 +6111,97 @@ WDI_ProcessSpoofMacAddrReq
 );
 WDI_Status
 WDI_ProcessSpoofMacAddrRsp
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+WDI_Status
+WDI_ProcessGetFrameLogRsp
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+WDI_Status
+WDI_ProcessGetFrameLogReq
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+WDI_Status
+WDI_ProcessMgmtLoggingInitReq
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+WDI_Status
+WDI_ProcessMgmtFrameLoggingInitRsp
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+WDI_Status
+WDI_ProcessEncryptMsgReq
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+WDI_Status
+WDI_ProcessEncryptMsgRsp
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+/**
+ @brief Process NAN Request
+
+ @param  pWDICtx:         pointer to the WLAN DAL context
+         pEventData:      pointer to the event information structure
+
+ @see
+ @return Result of the function call
+*/
+WDI_Status
+WDI_ProcessNanRequest
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+/**
+ @brief Process NAN Response
+
+ @param  pWDICtx:         pointer to the WLAN DAL context
+         pEventData:      pointer to the event information structure
+
+ @see
+ @return Result of the function call
+*/
+WDI_Status
+WDI_ProcessNanResponse
+(
+  WDI_ControlBlockType*  pWDICtx,
+  WDI_EventInfoType*     pEventData
+);
+
+/**
+*@brief Process NAN Event function (called when
+        an indication is being received over the
+        bus from HAL)
+
+ @param  pWDICtx:         pointer to the WLAN DAL context
+         pEventData:      pointer to the event information structure
+
+ @see
+ @return Result of the function call
+*/
+WDI_Status
+WDI_ProcessNanEvent
 (
   WDI_ControlBlockType*  pWDICtx,
   WDI_EventInfoType*     pEventData

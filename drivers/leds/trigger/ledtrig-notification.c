@@ -125,6 +125,7 @@ static void __exit notification_trig_exit(void)
 module_init(notification_trig_init);
 module_exit(notification_trig_exit);
 
-MODULE_AUTHOR("Richard Purdie <rpurdie@openedhand.com>");
+// Original MODULE_AUTHOR("Richard Purdie <rpurdie@openedhand.com>");
+MODULE_AUTHOR("Legrand Benjamin <android@legrand.ws>");
 MODULE_DESCRIPTION("Timer LED trigger");
 MODULE_LICENSE("GPL");

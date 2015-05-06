@@ -36,8 +36,6 @@
  *  This file contains the external API implemntation exposed by the 
  *   wlan device abstarction layer module.
  *
- *   Copyright (c) 2008 QUALCOMM Incorporated. All Rights Reserved.
- *   Qualcomm Confidential and Proprietary
  */
 
 
@@ -48,10 +46,7 @@
 #include "wlan_qct_wdi_dts.h"
 #include "wlan_qct_wdi_dp.h"
 #include "wlan_qct_wdi_sta.h"
-
-#ifdef DEBUG_ROAM_DELAY
 #include "vos_utils.h"
-#endif
 
 static WDTS_TransportDriverTrype gTransportDriver = {
   WLANDXE_Open, 
@@ -414,6 +409,9 @@ wpt_status WDTS_TxPacketComplete(void *pContext, wpt_packet *pFrame, wpt_status 
 
   // Do Sanity checks
   if(NULL == pContext || NULL == pFrame){
+    VOS_TRACE(VOS_MODULE_ID_WDI, VOS_TRACE_LEVEL_WARN,
+                 "%s: Tx complete cannot proceed(%p:%p)",
+                 __func__, pContext, pFrame);
     return eWLAN_PAL_STATUS_E_FAILURE;
   }
 
@@ -452,6 +450,8 @@ wpt_status WDTS_TxPacketComplete(void *pContext, wpt_packet *pFrame, wpt_status 
     // intentional fall-through to handle eapol packet as mgmt
     case WDI_MAC_MGMT_FRAME:
       WDI_DS_MemPoolFree(&(pClientData->mgmtMemPool), pvBDHeader, physBDHeader);
+      VOS_TRACE(VOS_MODULE_ID_WDI, VOS_TRACE_LEVEL_INFO,
+                   "%s: Management frame Tx complete status: %d", __func__, status);
       break;
   }
   WDI_SetBDPointers(pFrame, 0, 0);
@@ -585,6 +585,42 @@ wpt_status WDTS_RxPacket (void *pContext, wpt_packet *pFrame, WDTS_ChannelType c
       ucMPDUHOffset, usMPDUDOffset, usMPDULen, ucMPDUHLen, ucTid,
       WDI_RX_BD_HEADER_SIZE);
 
+  pRxMetadata = WDI_DS_ExtractRxMetaData(pFrame);
+
+  // Special handling for frames which contain logging information
+  if (WDTS_CHANNEL_RX_LOG == channel)
+  {
+      if(VPKT_SIZE_BUFFER_ALIGNED < (usMPDULen+ucMPDUHOffset)){
+        WPAL_TRACE(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_FATAL,
+                   "Invalid Frame size, might memory corrupted(%d+%d/%d)",
+                   usMPDULen, ucMPDUHOffset, VPKT_SIZE_BUFFER_ALIGNED);
+
+        /* Size of the packet tranferred by the DMA engine is
+         * greater than the the memory allocated for the skb
+         */
+        WPAL_BUG(0);
+
+        wpalPacketFree(pFrame);
+        return eWLAN_PAL_STATUS_SUCCESS;
+      }
+
+      /* Firmware should send the Header offset as length
+       * of RxBd and data length should be populated to
+       * the length of total data being sent
+       */
+      wpalPacketSetRxLength(pFrame, usMPDULen+ucMPDUHOffset);
+      wpalPacketRawTrimHead(pFrame, ucMPDUHOffset);
+
+      // Invoke Rx complete callback
+      wpalLogPktSerialize(pFrame);
+
+      return eWLAN_PAL_STATUS_SUCCESS;
+  }
+  else
+  {
+      pRxMetadata->loggingData = 0;
+  }
+
   if(!isFcBd)
   {
       if(usMPDUDOffset <= ucMPDUHOffset || usMPDULen < ucMPDUHLen) {
@@ -634,9 +670,6 @@ wpt_status WDTS_RxPacket (void *pContext, wpt_packet *pFrame, WDTS_ChannelType c
           wpalPacketFree(pFrame);
           return eWLAN_PAL_STATUS_SUCCESS;
       }
-     
-
-      pRxMetadata = WDI_DS_ExtractRxMetaData(pFrame);
 
       pRxMetadata->fc = isFcBd;
       pRxMetadata->staId = WDI_RX_BD_GET_STA_ID(pBDHeader);
@@ -730,16 +763,10 @@ wpt_status WDTS_RxPacket (void *pContext, wpt_packet *pFrame, WDTS_ChannelType c
       WPAL_PACKET_SET_BD_POINTER(pFrame, pBDHeader);
       WPAL_PACKET_SET_BD_LENGTH(pFrame, sizeof(WDI_RxBdType));
 
-#ifdef DEBUG_ROAM_DELAY
-      //Hack we need to send the frame type, so we are using bufflen as frametype
-      vos_record_roam_event(e_DXE_RX_PKT_TIME, (void *)pFrame, pRxMetadata->type);
-      //Should we use the below check to avoid funciton calls
-      /*
-      if(gRoamDelayMetaInfo.dxe_monitor_tx)
+      if (((WDI_ControlBlockType *)pClientData->pcontext)->roamDelayStatsEnabled)
       {
+          vos_record_roam_event(e_DXE_RX_PKT_TIME, (void *)pFrame, pRxMetadata->type);
       }
-      */
-#endif
       // Invoke Rx complete callback
       pClientData->receiveFrameCB(pClientData->pCallbackContext, pFrame);  
   }
@@ -748,7 +775,6 @@ wpt_status WDTS_RxPacket (void *pContext, wpt_packet *pFrame, WDTS_ChannelType c
       wpalPacketSetRxLength(pFrame, usMPDULen+ucMPDUHOffset);
       wpalPacketRawTrimHead(pFrame, ucMPDUHOffset);
 
-      pRxMetadata = WDI_DS_ExtractRxMetaData(pFrame);
       //flow control related
       pRxMetadata->fc = isFcBd;
       pRxMetadata->mclkRxTimestamp = WDI_RX_BD_GET_TIMESTAMP(pBDHeader);
@@ -933,16 +959,10 @@ wpt_status WDTS_TxPacket(void *pContext, wpt_packet *pFrame)
 #endif
   // Send packet to  Transport Driver. 
   status =  gTransportDriver.xmit(pDTDriverContext, pFrame, channel);
-#ifdef DEBUG_ROAM_DELAY
-   //Hack we need to send the frame type, so we are using bufflen as frametype
-   vos_record_roam_event(e_DXE_FIRST_XMIT_TIME, (void *)pFrame, pTxMetadata->frmType);
-   //Should we use the below check to avoid funciton calls
-   /*
-   if(gRoamDelayMetaInfo.dxe_monitor_tx)
-   {
-   }
-   */
-#endif
+  if (((WDI_ControlBlockType *)pContext)->roamDelayStatsEnabled)
+  {
+      vos_record_roam_event(e_DXE_FIRST_XMIT_TIME, (void *)pFrame, pTxMetadata->frmType);
+  }
   return status;
 }
 

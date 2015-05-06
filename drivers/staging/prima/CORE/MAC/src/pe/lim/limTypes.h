@@ -257,6 +257,9 @@ typedef struct sLimMlmAssocInd
 
 
     tAniBool               WmmStaInfoPresent;
+#ifdef WLAN_FEATURE_AP_HT40_24G
+    tAniBool               HT40MHzIntoPresent;
+#endif
 
     // Required for indicating the frames to upper layer
     tANI_U32             beaconLength;
@@ -296,6 +299,9 @@ typedef struct sLimMlmReassocInd
     tSirSupChnl             supportedChannels;
 
     tAniBool               WmmStaInfoPresent;
+#ifdef WLAN_FEATURE_AP_HT40_24G
+    tAniBool               HT40MHzIntoPresent;
+#endif
 
     // Required for indicating the frames to upper layer
     tANI_U32             beaconLength;
@@ -670,7 +676,8 @@ void limProcessActionFrameNoSession(tpAniSirGlobal pMac, tANI_U8 *pRxMetaInfo);
 tSirRetStatus limPopulateMacHeader(tpAniSirGlobal, tANI_U8*, tANI_U8, tANI_U8, tSirMacAddr,tSirMacAddr);
 tSirRetStatus limSendProbeReqMgmtFrame(tpAniSirGlobal, tSirMacSSid *, tSirMacAddr, tANI_U8, tSirMacAddr, tANI_U32, tANI_U32, tANI_U8 *); 
 void limSendProbeRspMgmtFrame(tpAniSirGlobal, tSirMacAddr, tpAniSSID, short, tANI_U8, tpPESession, tANI_U8);
-void limSendAuthMgmtFrame(tpAniSirGlobal, tSirMacAuthFrameBody *, tSirMacAddr, tANI_U8,tpPESession);
+void limSendAuthMgmtFrame(tpAniSirGlobal, tSirMacAuthFrameBody *, tSirMacAddr,
+                                             tANI_U8, tpPESession , tAniBool);
 void limSendAssocReqMgmtFrame(tpAniSirGlobal, tLimMlmAssocReq *,tpPESession);
 void limSendReassocReqMgmtFrame(tpAniSirGlobal, tLimMlmReassocReq *,tpPESession);
 #ifdef WLAN_FEATURE_VOWIFI_11R
@@ -1106,5 +1113,8 @@ void limProcessRxScanEvent(tpAniSirGlobal mac, void *buf);
 
 int limProcessRemainOnChnlReq(tpAniSirGlobal pMac, tANI_U32 *pMsg);
 void limRemainOnChnRsp(tpAniSirGlobal pMac, eHalStatus status, tANI_U32 *data);
+void limProcessMlmSpoofMacAddrRsp(tpAniSirGlobal pMac, tSirRetStatus rspStatus);
+tSirRetStatus limProcessSmeSetTdls2040BSSCoexReq(tpAniSirGlobal pMac,
+                                                 tANI_U32 *pMsgBuf);
 #endif /* __LIM_TYPES_H */
 
