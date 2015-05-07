@@ -707,7 +707,7 @@ static int __wlan_hdd_cfg80211_nan_request(struct wiphy *wiphy,
  */
 static int wlan_hdd_cfg80211_nan_request(struct wiphy *wiphy,
                                          struct wireless_dev *wdev,
-                                         const void *data, int data_len)
+                                         void *data, int data_len)
 {
     int ret;
 
@@ -1935,7 +1935,7 @@ static int __wlan_hdd_cfg80211_ll_stats_set(struct wiphy *wiphy,
 }
 static int wlan_hdd_cfg80211_ll_stats_set(struct wiphy *wiphy,
                                           struct wireless_dev *wdev,
-                                          const void *data,
+                                          void *data,
                                           int data_len)
 {
     int ret = 0;
@@ -2063,7 +2063,7 @@ static int __wlan_hdd_cfg80211_ll_stats_get(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_ll_stats_get(struct wiphy *wiphy,
                                           struct wireless_dev *wdev,
-                                          const void *data,
+                                          void *data,
                                           int data_len)
 {
     int ret = 0;
@@ -2233,7 +2233,7 @@ static int __wlan_hdd_cfg80211_ll_stats_clear(struct wiphy *wiphy,
 }
 static int wlan_hdd_cfg80211_ll_stats_clear(struct wiphy *wiphy,
                                             struct wireless_dev *wdev,
-                                            const void *data,
+                                            void *data,
                                             int data_len)
 {
    int ret = 0;
@@ -3422,7 +3422,7 @@ static int __wlan_hdd_cfg80211_extscan_get_capabilities(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_extscan_get_capabilities(struct wiphy *wiphy,
                                                       struct wireless_dev *wdev,
-                                                  const void *data, int dataLen)
+                                                      void *data, int dataLen)
 {
    int ret = 0;
 
@@ -3507,7 +3507,7 @@ failed:
 }
 static int wlan_hdd_cfg80211_extscan_get_cached_results(struct wiphy *wiphy,
                                                 struct wireless_dev *wdev,
-                                                const void *data, int dataLen)
+                                                void *data, int dataLen)
 {
    int ret = 0;
 
@@ -3656,7 +3656,7 @@ fail:
 
 static int wlan_hdd_cfg80211_extscan_set_bssid_hotlist(struct wiphy *wiphy,
                                         struct wireless_dev *wdev,
-                                        const void *data, int dataLen)
+                                        void *data, int dataLen)
 {
    int ret = 0;
 
@@ -3837,7 +3837,7 @@ fail:
 
 static int wlan_hdd_cfg80211_extscan_set_significant_change(struct wiphy *wiphy,
                                         struct wireless_dev *wdev,
-                                        const void *data, int dataLen)
+                                        void *data, int dataLen)
 {
     int ret = 0;
 
@@ -3946,7 +3946,7 @@ static int __wlan_hdd_cfg80211_extscan_get_valid_channels(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_extscan_get_valid_channels(struct wiphy *wiphy,
                                         struct wireless_dev *wdev,
-                                        const void *data, int dataLen)
+                                        void *data, int dataLen)
 {
     int ret = 0;
 
@@ -4199,7 +4199,7 @@ fail:
 
 static int wlan_hdd_cfg80211_extscan_start(struct wiphy *wiphy,
                                         struct wireless_dev *wdev,
-                                        const void *data, int dataLen)
+                                        void *data, int dataLen)
 {
    int ret = 0;
 
@@ -4270,7 +4270,7 @@ static int __wlan_hdd_cfg80211_extscan_stop(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_extscan_stop(struct wiphy *wiphy,
                                         struct wireless_dev *wdev,
-                                        const void *data, int dataLen)
+                                        void *data, int dataLen)
 {
    int ret = 0;
 
@@ -4340,7 +4340,7 @@ static int __wlan_hdd_cfg80211_extscan_reset_bssid_hotlist(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_extscan_reset_bssid_hotlist(struct wiphy *wiphy,
                                         struct wireless_dev *wdev,
-                                        const void *data, int dataLen)
+	 				void *data, int dataLen)
 {
    int ret = 0;
 
@@ -4414,7 +4414,7 @@ static int __wlan_hdd_cfg80211_extscan_reset_significant_change(
 static int wlan_hdd_cfg80211_extscan_reset_significant_change(
                                         struct wiphy *wiphy,
                                         struct wireless_dev *wdev,
-                                        const void *data, int dataLen)
+                                        void *data, int dataLen)
 {
    int ret = 0;
 
@@ -4545,7 +4545,7 @@ static int __wlan_hdd_cfg80211_set_spoofed_mac_oui(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_set_spoofed_mac_oui(struct wiphy *wiphy,
         struct wireless_dev *wdev,
-        const void *data,
+        void *data,
         int data_len)
 {
     int ret = 0;
@@ -4659,7 +4659,7 @@ nla_put_failure:
 
 static int wlan_hdd_cfg80211_exttdls_get_status(struct wiphy *wiphy,
                                                 struct wireless_dev *wdev,
-                                                const void *data,
+                                                void *data,
                                                 int data_len)
 {
     int ret = 0;
@@ -4853,7 +4853,7 @@ static int __wlan_hdd_cfg80211_exttdls_enable(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_exttdls_enable(struct wiphy *wiphy,
                                             struct wireless_dev *wdev,
-                                            const void *data,
+                                            void *data,
                                             int data_len)
 {
    int ret = 0;
@@ -4925,7 +4925,7 @@ static int __wlan_hdd_cfg80211_exttdls_disable(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_exttdls_disable(struct wiphy *wiphy,
                                              struct wireless_dev *wdev,
-                                             const void *data,
+                                             void *data,
                                              int data_len)
 {
    int ret = 0;
@@ -5061,7 +5061,7 @@ nla_put_failure:
 static int
 wlan_hdd_cfg80211_get_supported_features(struct wiphy *wiphy,
                                          struct wireless_dev *wdev,
-                                         const void *data, int data_len)
+                                         void *data, int data_len)
 {
     int ret = 0;
 
@@ -5166,7 +5166,7 @@ max_buffer_err:
 static int
 wlan_hdd_cfg80211_get_concurrency_matrix(struct wiphy *wiphy,
                                          struct wireless_dev *wdev,
-                                         const void *data, int data_len)
+                                         void *data, int data_len)
 {
     int ret = 0;
 
@@ -5233,7 +5233,7 @@ static int __wlan_hdd_cfg80211_disable_dfs_channels(struct wiphy *wiphy,
 
 static int wlan_hdd_cfg80211_disable_dfs_channels(struct wiphy *wiphy,
                                             struct wireless_dev *wdev,
-                                            const void *data,
+                                            void *data,
                                             int data_len)
 {
    int ret = 0;
@@ -5308,7 +5308,7 @@ static int __wlan_hdd_cfg80211_firmware_roaming(struct wiphy *wiphy,
 }
 
 static int wlan_hdd_cfg80211_firmware_roaming(struct wiphy *wiphy,
-            struct wireless_dev *wdev, const void *data, int data_len)
+            struct wireless_dev *wdev, void *data, int data_len)
 {
     int ret = 0;
 
