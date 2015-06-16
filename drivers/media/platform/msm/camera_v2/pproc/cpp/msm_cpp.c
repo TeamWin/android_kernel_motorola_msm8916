@@ -46,7 +46,7 @@
 
 #define MSM_CPP_MAX_BUFF_QUEUE	16
 
-#define CONFIG_MSM_CPP_DBG	0
+#define CONFIG_MSM_CPP_DBG	1
 
 #define ENABLE_CPP_LOW		0
 
