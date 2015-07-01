@@ -499,12 +499,12 @@ struct stm_response {
 #define WAKE_IRQ_IDX_ALGO_STATUS_LO         2
 #define WAKE_IRQ_IDX_ALGO_STATUS_MED        3
 #define WAKE_IRQ_IDX_ALGO_STATUS_HI         4
-#define WAKE_IRQ_IDX_PROX                   5 + 1
-#define WAKE_IRQ_IDX_COVER                  6 + 1
-#define WAKE_IRQ_IDX_HEADSET                7 + 1
-#define WAKE_IRQ_IDX_FLAT                   8 + 1
-#define WAKE_IRQ_IDX_STOWED                 9 + 1
-#define WAKE_IRQ_IDX_CAMERA                10 + 1
+#define WAKE_IRQ_IDX_PROX                   5
+#define WAKE_IRQ_IDX_COVER                  6
+#define WAKE_IRQ_IDX_HEADSET                7
+#define WAKE_IRQ_IDX_FLAT                   8
+#define WAKE_IRQ_IDX_STOWED                 9
+#define WAKE_IRQ_IDX_CAMERA                10
 #define WAKE_IRQ_IDX_SIM                   12
 #define WAKE_IRQ_IDX_MOTION                14
 #define WAKE_IRQ_IDX_MODALITY              16
